@@ -58,7 +58,7 @@ export function renderDiff(a: string, b: string, side: 'A' | 'B'): ReactNode[] {
   return out;
 }
 
-/** Контент ячейки значения для одной стороны с учётом статуса строки. */
+/** Контент ячейки значения для одной стороны с учётом статуса строки (полный, для раскрытой строки). */
 export function cellNodes(
   status: string,
   side: 'A' | 'B',
@@ -69,4 +69,38 @@ export function cellNodes(
   if (value === null) return <span className="none">— (нет)</span>;
   if (status === 'different') return renderDiff(valueA ?? '', valueB ?? '', side);
   return <span className="seg eq">{visualize(value, side)}</span>;
+}
+
+const PREVIEW_LIMIT = 200;
+
+/**
+ * Дешёвый предпросмотр значения (для свёрнутой строки): ограничен по длине,
+ * поэтому рендер списка из сотен строк не блокирует поток. Полный посимвольный
+ * diff со всеми пробелами считается только при раскрытии (cellNodes).
+ */
+export function previewNodes(
+  status: string,
+  side: 'A' | 'B',
+  valueA: string | null,
+  valueB: string | null,
+): ReactNode {
+  const value = side === 'A' ? valueA : valueB;
+  if (value === null) return <span className="none">— (нет)</span>;
+  const ell = value.length > PREVIEW_LIMIT ? '…' : '';
+  if (status === 'different') {
+    const a = (valueA ?? '').slice(0, PREVIEW_LIMIT);
+    const b = (valueB ?? '').slice(0, PREVIEW_LIMIT);
+    return (
+      <>
+        {renderDiff(a, b, side)}
+        {ell}
+      </>
+    );
+  }
+  return (
+    <span className="seg eq">
+      {visualize(value.slice(0, PREVIEW_LIMIT), side)}
+      {ell}
+    </span>
+  );
 }

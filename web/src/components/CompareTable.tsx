@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CompareResult, FileSummary, OverrideEntry, RowStatus } from '../types';
-import { cellNodes } from './diffView';
+import { cellNodes, previewNodes } from './diffView';
 import { Combobox } from './Combobox';
 
 const STATUS_LABEL: Record<RowStatus, string> = {
@@ -9,6 +9,8 @@ const STATUS_LABEL: Record<RowStatus, string> = {
   only_a: 'только A',
   only_b: 'только B',
 };
+
+const PAGE = 150; // сколько строк рендерим за раз (защита от фриза на больших стендах)
 
 const depth = (p: string): number => (p.match(/\//g) ?? []).length;
 const isLong = (s: string | null): boolean => !!s && (s.includes('\n') || s.length > 80);
@@ -35,6 +37,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
   const [query, setQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [limit, setLimit] = useState(PAGE);
 
   const byFileRows = result.mode === 'by_file' ? result.rows : [];
   const mergedRows = result.mode === 'merged' ? result.rows : [];
@@ -82,6 +85,9 @@ export function CompareTable({ result }: { result: CompareResult }) {
     [mergedRows, onlyDiff, query],
   );
 
+  // сбрасываем лимит при смене результата/фильтров
+  useEffect(() => setLimit(PAGE), [result, onlyDiff, query, fileFilter]);
+
   const toggle = (key: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -91,7 +97,10 @@ export function CompareTable({ result }: { result: CompareResult }) {
     });
 
   const s = result.stats;
-  const shown = merged ? visibleMerged.length : visibleGroups.length;
+  const total = merged ? visibleMerged.length : visibleGroups.length;
+  const shownMerged = visibleMerged.slice(0, limit);
+  const shownGroups = visibleGroups.slice(0, limit);
+  const rendered = merged ? shownMerged.length : shownGroups.length;
 
   const exportCsv = () => {
     const rows = merged
@@ -135,15 +144,13 @@ export function CompareTable({ result }: { result: CompareResult }) {
               placeholder="все файлы"
               labelFor={(v) => (v === '' ? 'все файлы' : v)}
               fetchOptions={(q) =>
-                Promise.resolve(
-                  ['', ...allFiles].filter((f) => !q || f.toLowerCase().includes(q.toLowerCase())),
-                )
+                Promise.resolve(['', ...allFiles].filter((f) => !q || f.toLowerCase().includes(q.toLowerCase())))
               }
             />
           </div>
         )}
-        <span className="muted">показано: {shown}</span>
-        <button className="export" disabled={shown === 0} onClick={exportCsv}>
+        <span className="muted">показано: {rendered} из {total}</span>
+        <button className="export" disabled={total === 0} onClick={exportCsv}>
           Экспорт CSV
         </button>
       </div>
@@ -171,17 +178,18 @@ export function CompareTable({ result }: { result: CompareResult }) {
         </thead>
         <tbody>
           {merged &&
-            visibleMerged.map((r) => {
+            shownMerged.map((r) => {
               const key = `${r.variable}|||${r.file}`;
               const exp = expanded.has(key);
               const long = isLong(r.valueA) || isLong(r.valueB);
-              const valClass = `val${long && !exp ? ' collapsed' : ''}`;
               return (
                 <tr key={key} className={`st-${r.status}`}>
                   <td className="var">{r.variable}</td>
                   <td className="file">{r.file}</td>
                   <td className="cell">
-                    <div className={valClass}>{cellNodes(r.status, 'A', r.valueA, r.valueB)}</div>
+                    <div className="val">
+                      {exp ? cellNodes(r.status, 'A', r.valueA, r.valueB) : previewNodes(r.status, 'A', r.valueA, r.valueB)}
+                    </div>
                     {r.sourceA && <div className="src">← {r.sourceA}</div>}
                     {exp && <OverrideTrail entries={r.overridesA} />}
                     {long && (
@@ -191,7 +199,9 @@ export function CompareTable({ result }: { result: CompareResult }) {
                     )}
                   </td>
                   <td className="cell">
-                    <div className={valClass}>{cellNodes(r.status, 'B', r.valueA, r.valueB)}</div>
+                    <div className="val">
+                      {exp ? cellNodes(r.status, 'B', r.valueA, r.valueB) : previewNodes(r.status, 'B', r.valueA, r.valueB)}
+                    </div>
                     {r.sourceB && <div className="src">← {r.sourceB}</div>}
                     {exp && <OverrideTrail entries={r.overridesB} />}
                     {long && (
@@ -208,14 +218,13 @@ export function CompareTable({ result }: { result: CompareResult }) {
             })}
 
           {!merged &&
-            visibleGroups.map((g) => {
+            shownGroups.map((g) => {
               const key = g.variable;
               const exp = expanded.has(key);
               const rep = g.rep;
               const long = isLong(rep.valueA) || isLong(rep.valueB);
               const multi = g.occ.length > 1;
               const showExpander = long || multi;
-              const valClass = `val${long && !exp ? ' collapsed' : ''}`;
               return (
                 <tr key={key} className={`st-${rep.status}`}>
                   <td className="var">{g.variable}</td>
@@ -224,7 +233,9 @@ export function CompareTable({ result }: { result: CompareResult }) {
                     {multi && <span className="muted"> +{g.occ.length - 1}</span>}
                   </td>
                   <td className="cell">
-                    <div className={valClass}>{cellNodes(rep.status, 'A', rep.valueA, rep.valueB)}</div>
+                    <div className="val">
+                      {exp ? cellNodes(rep.status, 'A', rep.valueA, rep.valueB) : previewNodes(rep.status, 'A', rep.valueA, rep.valueB)}
+                    </div>
                     {exp && multi && <OccList occ={g.occ} side="A" rep={rep} />}
                     {showExpander && (
                       <button className="more" onClick={() => toggle(key)}>
@@ -233,7 +244,9 @@ export function CompareTable({ result }: { result: CompareResult }) {
                     )}
                   </td>
                   <td className="cell">
-                    <div className={valClass}>{cellNodes(rep.status, 'B', rep.valueA, rep.valueB)}</div>
+                    <div className="val">
+                      {exp ? cellNodes(rep.status, 'B', rep.valueA, rep.valueB) : previewNodes(rep.status, 'B', rep.valueA, rep.valueB)}
+                    </div>
                     {exp && multi && <OccList occ={g.occ} side="B" rep={rep} />}
                     {showExpander && (
                       <button className="more" onClick={() => toggle(key)}>
@@ -253,10 +266,20 @@ export function CompareTable({ result }: { result: CompareResult }) {
               );
             })}
 
-          {shown === 0 && (
+          {total === 0 && (
             <tr>
               <td colSpan={5} className="empty">
                 нет строк под текущие фильтры
+              </td>
+            </tr>
+          )}
+
+          {rendered < total && (
+            <tr>
+              <td colSpan={5} className="loadmore-cell">
+                <button className="loadmore" onClick={() => setLimit((l) => l + PAGE)}>
+                  Показать ещё {Math.min(PAGE, total - rendered)} (осталось {total - rendered})
+                </button>
               </td>
             </tr>
           )}
@@ -307,11 +330,12 @@ function OverrideTrail({ entries }: { entries?: OverrideEntry[] }) {
 function FileSummaryPanel({ files }: { files: FileSummary[] }) {
   const diffs = files.filter((f) => f.status !== 'equal');
   if (diffs.length === 0) return null;
+  const shown = diffs.slice(0, 200);
   return (
     <details className="filepanel">
       <summary>файлы с отличиями по байтам: {diffs.length} (вкл. пробелы/EOL вне значений)</summary>
       <div className="filepanel-body">
-        {diffs.map((f) => (
+        {shown.map((f) => (
           <div key={f.path} className="filerow">
             <span className={`badge st-${f.status}`}>{STATUS_LABEL[f.status]}</span>
             <span className="file">{f.path}</span>
@@ -322,6 +346,7 @@ function FileSummaryPanel({ files }: { files: FileSummary[] }) {
             )}
           </div>
         ))}
+        {diffs.length > shown.length && <div className="muted">…и ещё {diffs.length - shown.length}</div>}
       </div>
     </details>
   );

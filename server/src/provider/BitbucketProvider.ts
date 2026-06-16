@@ -57,6 +57,7 @@ export class BitbucketProvider implements FileProvider {
         baseURL: `${opts.baseUrl}/rest/api/latest/projects/${opts.project}/repos/${opts.repo}`,
         headers: { Authorization: `Bearer ${opts.token}` },
         httpsAgent: new https.Agent({ rejectUnauthorized: opts.rejectUnauthorized ?? false }),
+        timeout: 30000, // не виснуть на стопорнувшемся запросе
       });
   }
 
@@ -86,7 +87,7 @@ export class BitbucketProvider implements FileProvider {
 
   async readEnvYamlFiles(branch: string, env: string): Promise<RepoFile[]> {
     const rels = (await this.listFiles(env, branch)).filter((p) => YAML_RE.test(p));
-    const files = await mapPool(rels, 6, async (rel) => ({
+    const files = await mapPool(rels, 12, async (rel) => ({
       path: rel,
       content: await this.raw(`${env}/${rel}`, branch),
     }));

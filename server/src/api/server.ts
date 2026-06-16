@@ -73,10 +73,23 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     }
     const { fp, sideA, sideB, mode, scope } = req.body;
     const provider = deps.getProvider(fp!);
-    if (mode === 'merged') {
-      return compareMerged(provider, fp!, sideA as CompareSide, sideB as CompareSide, scope ?? '');
+    const a = sideA as CompareSide;
+    const b = sideB as CompareSide;
+    const t0 = Date.now();
+    const label = `[compare] ${fp} ${a.branch}/${a.env} vs ${b.branch}/${b.env} mode=${mode ?? 'by_file'}`;
+    console.log(`${label} — старт`);
+    try {
+      const res =
+        mode === 'merged'
+          ? await compareMerged(provider, fp!, a, b, scope ?? '')
+          : await compareByFile(provider, fp!, a, b);
+      console.log(`${label} — готово: строк=${res.rows.length} за ${Date.now() - t0}ms`);
+      return res;
+    } catch (e) {
+      console.error(`${label} — ошибка за ${Date.now() - t0}ms: ${(e as Error).message}`);
+      reply.code(502);
+      return { error: (e as Error).message };
     }
-    return compareByFile(provider, fp!, sideA as CompareSide, sideB as CompareSide);
   });
 
   return app;

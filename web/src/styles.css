@@ -404,6 +404,19 @@ button.more {
   color: var(--muted);
   padding: 20px;
 }
+.loadmore-cell {
+  text-align: center;
+  background: var(--panel-2);
+}
+button.loadmore {
+  font: inherit;
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--accent);
+  cursor: pointer;
+}
 .src {
   margin-top: 3px;
   font-size: 11px;

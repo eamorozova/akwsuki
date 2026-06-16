@@ -1,0 +1,9 @@
+{
+  "bitbucketUrl": "https://bitbucket.example.com",
+  "project": "PROJECT_KEY",
+  "fps": [
+    { "name": "SDS", "repo": "repo_slug_for_sds" },
+    { "name": "MMS", "repo": "repo_slug_for_mms" },
+    { "name": "KSS", "repo": "repo_slug_for_kss" }
+  ]
+}

@@ -1,10 +1,10 @@
 import { buildServer } from './api/server';
-import { buildLocalDeps } from './config/appConfig';
+import { buildDeps } from './config/appConfig';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const HOST = process.env.HOST ?? '0.0.0.0';
 
-const app = await buildServer(buildLocalDeps());
+const app = await buildServer(buildDeps());
 
 try {
   const addr = await app.listen({ port: PORT, host: HOST });

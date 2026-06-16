@@ -1,6 +1,7 @@
 node_modules/
 dist/
 server/demo-data/
+fp-config.json
 *.log
 .DS_Store
 .env

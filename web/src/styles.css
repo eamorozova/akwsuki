@@ -140,6 +140,20 @@ button.primary:disabled {
 .muted {
   color: var(--muted);
 }
+button.export {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--accent);
+  cursor: pointer;
+}
+button.export:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
 
 table.cmp {
   width: 100%;

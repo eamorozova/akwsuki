@@ -7,12 +7,14 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "demo:gen": "node scripts/gen-demo.mjs",
+    "bb:smoke": "tsx scripts/bitbucket-smoke.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "axios": "^1.7.7",
     "fastify": "^5.1.0",
     "yaml": "^2.5.0"
   },

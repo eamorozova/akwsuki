@@ -138,6 +138,13 @@ export function CompareTable({ result }: { result: CompareResult }) {
           </>
         )}
         <span className="muted">показано: {rows.length}</span>
+        <button
+          className="export"
+          disabled={rows.length === 0}
+          onClick={() => downloadCsv(csvFilename(result), buildCsv(rows, merged))}
+        >
+          Экспорт CSV
+        </button>
       </div>
 
       <table className="cmp">
@@ -202,11 +209,45 @@ export function CompareTable({ result }: { result: CompareResult }) {
   );
 }
 
+const csvField = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+function buildCsv(rows: UiRow[], merged: boolean): string {
+  const header = merged
+    ? ['Переменная', 'Файл', 'Значение A', 'Источник A', 'Значение B', 'Источник B', 'Статус']
+    : ['Переменная', 'Файл', 'Значение A', 'Значение B', 'Статус'];
+  const lines = [header.map(csvField).join(',')];
+  for (const r of rows) {
+    const cols = merged
+      ? [r.variable, r.file, r.valueA, r.sourceA, r.valueB, r.sourceB, STATUS_LABEL[r.status]]
+      : [r.variable, r.file, r.valueA, r.valueB, STATUS_LABEL[r.status]];
+    lines.push(cols.map(csvField).join(','));
+  }
+  return lines.join('\r\n');
+}
+
+function csvFilename(r: CompareResult): string {
+  const side = (x: { branch: string; env: string }) => `${x.branch}-${x.env}`.replace(/[^\w.-]+/g, '_');
+  return `sledilo_${r.fp}_${side(r.sideA)}_vs_${side(r.sideB)}.csv`;
+}
+
+function downloadCsv(filename: string, csv: string): void {
+  // BOM — чтобы Excel корректно показал кириллицу
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function OverrideTrail({ entries }: { entries?: OverrideEntry[] }) {
   if (!entries || entries.length <= 1) return null;
   return (
     <div className="trail">
-      <div className="trail-title">слои (база → глубокий, вклад каждого):</div>
+      <div className="trail-title">слои:</div>
       {entries.map((e, i) => (
         <div key={e.file} className={`trail-row${i === entries.length - 1 ? ' win' : ''}`}>
           <span className="trail-file">{e.file}</span>

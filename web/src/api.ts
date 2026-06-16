@@ -16,7 +16,8 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   fps: () => j<{ name: string }[]>('/api/fp'),
-  branches: (fp: string) => j<string[]>(`/api/fp/${encodeURIComponent(fp)}/branches`),
+  branches: (fp: string, q?: string) =>
+    j<string[]>(`/api/fp/${encodeURIComponent(fp)}/branches${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   envs: (fp: string, branch: string) =>
     j<string[]>(`/api/fp/${encodeURIComponent(fp)}/envs?branch=${encodeURIComponent(branch)}`),
   scopes: (fp: string, branch: string, env: string) =>

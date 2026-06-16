@@ -3,20 +3,33 @@ import type { ReactNode } from 'react';
 import { api } from './api';
 import type { CompareMode, CompareResult } from './types';
 import { CompareTable } from './components/CompareTable';
+import { Combobox } from './components/Combobox';
+
+type Theme = 'light' | 'dark';
 
 export function App() {
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem('sledilo-theme') as Theme) || 'light',
+  );
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('sledilo-theme', theme);
+  }, [theme]);
+
   const [fps, setFps] = useState<string[]>([]);
   const [fp, setFp] = useState('');
-  const [branches, setBranches] = useState<string[]>([]);
   const [branchA, setBranchA] = useState('');
   const [branchB, setBranchB] = useState('');
   const [envsA, setEnvsA] = useState<string[]>([]);
   const [envsB, setEnvsB] = useState<string[]>([]);
   const [envA, setEnvA] = useState('');
   const [envB, setEnvB] = useState('');
+  const [loadingEnvsA, setLoadingEnvsA] = useState(false);
+  const [loadingEnvsB, setLoadingEnvsB] = useState(false);
   const [mode, setMode] = useState<CompareMode>('by_file');
   const [scopes, setScopes] = useState<string[]>([]);
   const [scope, setScope] = useState('');
+  const [loadingScopes, setLoadingScopes] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,36 +38,42 @@ export function App() {
     api.fps().then((x) => setFps(x.map((f) => f.name))).catch((e) => setError(String(e)));
   }, []);
 
+  // сброс при смене ФП
   useEffect(() => {
-    if (!fp) return;
-    setBranches([]);
     setBranchA('');
     setBranchB('');
     setEnvsA([]);
     setEnvsB([]);
     setEnvA('');
     setEnvB('');
+    setScopes([]);
+    setScope('');
     setResult(null);
-    api.branches(fp).then(setBranches).catch((e) => setError(String(e)));
   }, [fp]);
 
   useEffect(() => {
     setEnvA('');
     setEnvsA([]);
-    if (fp && branchA) api.envs(fp, branchA).then(setEnvsA).catch((e) => setError(String(e)));
+    if (!fp || !branchA) return;
+    setLoadingEnvsA(true);
+    api.envs(fp, branchA).then(setEnvsA).catch((e) => setError(String(e))).finally(() => setLoadingEnvsA(false));
   }, [fp, branchA]);
 
   useEffect(() => {
     setEnvB('');
     setEnvsB([]);
-    if (fp && branchB) api.envs(fp, branchB).then(setEnvsB).catch((e) => setError(String(e)));
+    if (!fp || !branchB) return;
+    setLoadingEnvsB(true);
+    api.envs(fp, branchB).then(setEnvsB).catch((e) => setError(String(e))).finally(() => setLoadingEnvsB(false));
   }, [fp, branchB]);
 
-  // области (для режима «слитый») берём со стороны A
+  // области для «слитого» режима — со стороны A
   useEffect(() => {
-    setScopes([]);
     setScope('');
-    if (fp && branchA && envA) api.scopes(fp, branchA, envA).then(setScopes).catch((e) => setError(String(e)));
+    setScopes([]);
+    if (!fp || !branchA || !envA) return;
+    setLoadingScopes(true);
+    api.scopes(fp, branchA, envA).then(setScopes).catch((e) => setError(String(e))).finally(() => setLoadingScopes(false));
   }, [fp, branchA, envA]);
 
   const canCompare = Boolean(fp && branchA && envA && branchB && envB);
@@ -79,61 +98,105 @@ export function App() {
       <header>
         <h1>sledilo</h1>
         <span className="sub">сверка конфигов стендов</span>
+        <button className="theme" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Тема">
+          {theme === 'light' ? '🌙' : '☀️'}
+        </button>
       </header>
 
       <section className="controls">
         <Field label="ФП">
-          <Select value={fp} onChange={setFp} options={fps} placeholder="выбрать ФП" />
+          <select value={fp} onChange={(e) => setFp(e.target.value)}>
+            <option value="">выбрать ФП</option>
+            {fps.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <div className="side">
-          <div className="side-title">Сторона A</div>
+          <span className="side-badge a">A</span>
           <Field label="Ветка">
-            <Select value={branchA} onChange={setBranchA} options={branches} disabled={!fp} placeholder="ветка" />
+            <Combobox
+              value={branchA}
+              onChange={setBranchA}
+              disabled={!fp}
+              placeholder="ветка"
+              fetchOptions={(q) => api.branches(fp, q)}
+            />
           </Field>
           <Field label="Окружение">
-            <Select value={envA} onChange={setEnvA} options={envsA} disabled={!branchA} placeholder="окружение" />
+            <select value={envA} disabled={!branchA || loadingEnvsA} onChange={(e) => setEnvA(e.target.value)}>
+              <option value="">{loadingEnvsA ? 'загрузка…' : 'окружение'}</option>
+              {envsA.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
 
         <div className="side">
-          <div className="side-title">Сторона B</div>
+          <span className="side-badge b">B</span>
           <Field label="Ветка">
-            <Select value={branchB} onChange={setBranchB} options={branches} disabled={!fp} placeholder="ветка" />
+            <Combobox
+              value={branchB}
+              onChange={setBranchB}
+              disabled={!fp}
+              placeholder="ветка"
+              fetchOptions={(q) => api.branches(fp, q)}
+            />
           </Field>
           <Field label="Окружение">
-            <Select value={envB} onChange={setEnvB} options={envsB} disabled={!branchB} placeholder="окружение" />
+            <select value={envB} disabled={!branchB || loadingEnvsB} onChange={(e) => setEnvB(e.target.value)}>
+              <option value="">{loadingEnvsB ? 'загрузка…' : 'окружение'}</option>
+              {envsB.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
 
         <div className="side">
-          <div className="side-title">Режим</div>
-          <Field label="Сравнение">
+          <Field label="Режим">
             <select value={mode} onChange={(e) => setMode(e.target.value as CompareMode)}>
               <option value="by_file">по файлам</option>
-              <option value="merged">слитый (переопределения)</option>
+              <option value="merged">слитый</option>
             </select>
           </Field>
           {mode === 'merged' && (
             <Field label="Область">
-              <select value={scope} onChange={(e) => setScope(e.target.value)} disabled={!scopes.length}>
-                {scopes.map((s) => (
-                  <option key={s} value={s}>
-                    {s === '' ? '(корень / весь стенд)' : s}
-                  </option>
-                ))}
+              <select value={scope} disabled={loadingScopes} onChange={(e) => setScope(e.target.value)}>
+                {loadingScopes && <option value="">загрузка…</option>}
+                {!loadingScopes &&
+                  scopes.map((s) => (
+                    <option key={s} value={s}>
+                      {s === '' ? '(корень / весь стенд)' : s}
+                    </option>
+                  ))}
               </select>
             </Field>
           )}
         </div>
 
         <button className="primary" disabled={!canCompare || loading} onClick={doCompare}>
-          {loading ? '…' : 'Сравнить'}
+          {loading ? 'Сравниваю…' : 'Сравнить'}
         </button>
       </section>
 
       {error && <div className="error">{error}</div>}
-      {result && <CompareTable result={result} />}
+
+      {loading && (
+        <div className="loading-block">
+          <span className="spinner" /> Загрузка сравнения… на больших стендах это может занять время
+        </div>
+      )}
+
+      {!loading && result && <CompareTable result={result} />}
     </div>
   );
 }
@@ -141,33 +204,8 @@ export function App() {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <span className="field-label">{label}</span>
       {children}
     </label>
-  );
-}
-
-function Select({
-  value,
-  onChange,
-  options,
-  disabled,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  disabled?: boolean;
-  placeholder?: string;
-}) {
-  return (
-    <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{placeholder ?? '—'}</option>
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {o}
-        </option>
-      ))}
-    </select>
   );
 }

@@ -1,18 +1,7 @@
 import { useMemo, useState } from 'react';
-import type {
-  CompareResult,
-  FileSummary,
-  OverrideEntry,
-  RowStatus,
-} from '../types';
+import type { CompareResult, FileSummary, OverrideEntry, RowStatus } from '../types';
 import { cellNodes } from './diffView';
-
-const dirOf = (p: string): string => {
-  const i = p.lastIndexOf('/');
-  return i === -1 ? '(корень)' : p.slice(0, i);
-};
-
-const isLong = (s: string | null): boolean => !!s && (s.includes('\n') || s.length > 80);
+import { Combobox } from './Combobox';
 
 const STATUS_LABEL: Record<RowStatus, string> = {
   equal: '=',
@@ -21,66 +10,76 @@ const STATUS_LABEL: Record<RowStatus, string> = {
   only_b: 'только B',
 };
 
-interface UiRow {
-  key: string;
-  variable: string;
+const depth = (p: string): number => (p.match(/\//g) ?? []).length;
+const isLong = (s: string | null): boolean => !!s && (s.includes('\n') || s.length > 80);
+const oneLine = (s: string | null): string => (s === null ? '— (нет)' : s.replace(/\n/g, ' ').slice(0, 90));
+
+interface Occ {
   file: string;
   valueA: string | null;
   valueB: string | null;
   status: RowStatus;
-  sourceA?: string | null;
-  sourceB?: string | null;
-  overridesA?: OverrideEntry[];
-  overridesB?: OverrideEntry[];
 }
 
-function toUiRows(result: CompareResult): UiRow[] {
-  if (result.mode === 'merged') {
-    return result.rows.map((r) => ({
-      key: `${r.variable}|||${r.file}`,
-      variable: r.variable,
-      file: r.file,
-      valueA: r.valueA,
-      valueB: r.valueB,
-      status: r.status,
-      sourceA: r.sourceA,
-      sourceB: r.sourceB,
-      overridesA: r.overridesA,
-      overridesB: r.overridesB,
-    }));
-  }
-  return result.rows.map((r) => ({
-    key: `${r.variable}|||${r.file}`,
-    variable: r.variable,
-    file: r.file,
-    valueA: r.valueA,
-    valueB: r.valueB,
-    status: r.status,
-  }));
+interface Group {
+  variable: string;
+  rep: Occ;
+  occ: Occ[];
+  diverges: boolean;
+  hasDiff: boolean;
 }
 
 export function CompareTable({ result }: { result: CompareResult }) {
   const merged = result.mode === 'merged';
   const [onlyDiff, setOnlyDiff] = useState(true);
   const [query, setQuery] = useState('');
-  const [folder, setFolder] = useState('');
-  const [file, setFile] = useState('');
+  const [fileFilter, setFileFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const allRows = useMemo(() => toUiRows(result), [result]);
-  const folders = useMemo(() => [...new Set(allRows.map((r) => dirOf(r.file)))].sort(), [allRows]);
-  const files = useMemo(() => [...new Set(allRows.map((r) => r.file))].sort(), [allRows]);
+  const byFileRows = result.mode === 'by_file' ? result.rows : [];
+  const mergedRows = result.mode === 'merged' ? result.rows : [];
 
-  const rows = useMemo(
+  const groups = useMemo<Group[]>(() => {
+    const map = new Map<string, Occ[]>();
+    for (const r of byFileRows) {
+      const occ: Occ = { file: r.file, valueA: r.valueA, valueB: r.valueB, status: r.status };
+      const arr = map.get(r.variable);
+      if (arr) arr.push(occ);
+      else map.set(r.variable, [occ]);
+    }
+    const out: Group[] = [];
+    for (const [variable, occ] of map) {
+      occ.sort((a, b) => depth(a.file) - depth(b.file) || a.file.localeCompare(b.file));
+      const rep = occ[0]!;
+      const diverges = occ.some((o) => o.valueA !== rep.valueA || o.valueB !== rep.valueB);
+      const hasDiff = occ.some((o) => o.status !== 'equal');
+      out.push({ variable, rep, occ, diverges, hasDiff });
+    }
+    out.sort((a, b) => a.variable.localeCompare(b.variable));
+    return out;
+  }, [byFileRows]);
+
+  const allFiles = useMemo(() => [...new Set(byFileRows.map((r) => r.file))].sort(), [byFileRows]);
+
+  const visibleGroups = useMemo(
     () =>
-      allRows.filter((r) => {
+      groups.filter((g) => {
+        if (onlyDiff && !g.hasDiff) return false;
+        if (query && !g.variable.toLowerCase().includes(query.toLowerCase())) return false;
+        if (fileFilter && !g.occ.some((o) => o.file === fileFilter)) return false;
+        return true;
+      }),
+    [groups, onlyDiff, query, fileFilter],
+  );
+
+  const visibleMerged = useMemo(
+    () =>
+      mergedRows.filter((r) => {
         if (onlyDiff && r.status === 'equal') return false;
-        if (!merged && folder && dirOf(r.file) !== folder) return false;
-        if (!merged && file && r.file !== file) return false;
         if (query && !r.variable.toLowerCase().includes(query.toLowerCase())) return false;
         return true;
       }),
-    [allRows, onlyDiff, folder, file, query, merged],
+    [mergedRows, onlyDiff, query],
   );
 
   const toggle = (key: string) =>
@@ -92,6 +91,17 @@ export function CompareTable({ result }: { result: CompareResult }) {
     });
 
   const s = result.stats;
+  const shown = merged ? visibleMerged.length : visibleGroups.length;
+
+  const exportCsv = () => {
+    const rows = merged
+      ? visibleMerged.map((r) => [r.variable, r.file, r.valueA, r.sourceA, r.valueB, r.sourceB, STATUS_LABEL[r.status]])
+      : visibleGroups.flatMap((g) => g.occ.map((o) => [g.variable, o.file, o.valueA, o.valueB, STATUS_LABEL[o.status]]));
+    const header = merged
+      ? ['Переменная', 'Файл', 'Значение A', 'Источник A', 'Значение B', 'Источник B', 'Статус']
+      : ['Переменная', 'Файл', 'Значение A', 'Значение B', 'Статус'];
+    downloadCsv(csvFilename(result), [header, ...rows].map((cols) => cols.map(csvField).join(',')).join('\r\n'));
+  };
 
   return (
     <div className="result">
@@ -118,36 +128,34 @@ export function CompareTable({ result }: { result: CompareResult }) {
           onChange={(e) => setQuery(e.target.value)}
         />
         {!merged && (
-          <>
-            <select value={folder} onChange={(e) => setFolder(e.target.value)}>
-              <option value="">все папки</option>
-              {folders.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-            <select value={file} onChange={(e) => setFile(e.target.value)}>
-              <option value="">все файлы</option>
-              {files.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-          </>
+          <div className="filter-combo">
+            <Combobox
+              value={fileFilter}
+              onChange={setFileFilter}
+              placeholder="все файлы"
+              labelFor={(v) => (v === '' ? 'все файлы' : v)}
+              fetchOptions={(q) =>
+                Promise.resolve(
+                  ['', ...allFiles].filter((f) => !q || f.toLowerCase().includes(q.toLowerCase())),
+                )
+              }
+            />
+          </div>
         )}
-        <span className="muted">показано: {rows.length}</span>
-        <button
-          className="export"
-          disabled={rows.length === 0}
-          onClick={() => downloadCsv(csvFilename(result), buildCsv(rows, merged))}
-        >
+        <span className="muted">показано: {shown}</span>
+        <button className="export" disabled={shown === 0} onClick={exportCsv}>
           Экспорт CSV
         </button>
       </div>
 
       <table className="cmp">
+        <colgroup>
+          <col className="c-var" />
+          <col className="c-file" />
+          <col className="c-val" />
+          <col className="c-val" />
+          <col className="c-status" />
+        </colgroup>
         <thead>
           <tr>
             <th>Переменная</th>
@@ -162,41 +170,90 @@ export function CompareTable({ result }: { result: CompareResult }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
-            const exp = expanded.has(r.key);
-            const long = isLong(r.valueA) || isLong(r.valueB);
-            const valClass = `val${long && !exp ? ' collapsed' : ''}`;
-            return (
-              <tr key={r.key} className={`st-${r.status}`}>
-                <td className="var">{r.variable}</td>
-                <td className="file">{r.file}</td>
-                <td className="cell">
-                  <div className={valClass}>{cellNodes(r.status, 'A', r.valueA, r.valueB)}</div>
-                  {merged && r.sourceA && <div className="src">← {r.sourceA}</div>}
-                  {merged && exp && <OverrideTrail entries={r.overridesA} />}
-                  {long && (
-                    <button className="more" onClick={() => toggle(r.key)}>
-                      {exp ? 'Свернуть' : 'Показать ещё'}
-                    </button>
-                  )}
-                </td>
-                <td className="cell">
-                  <div className={valClass}>{cellNodes(r.status, 'B', r.valueA, r.valueB)}</div>
-                  {merged && r.sourceB && <div className="src">← {r.sourceB}</div>}
-                  {merged && exp && <OverrideTrail entries={r.overridesB} />}
-                  {long && (
-                    <button className="more" onClick={() => toggle(r.key)}>
-                      {exp ? 'Свернуть' : 'Показать ещё'}
-                    </button>
-                  )}
-                </td>
-                <td className="status">
-                  <span className={`badge st-${r.status}`}>{STATUS_LABEL[r.status]}</span>
-                </td>
-              </tr>
-            );
-          })}
-          {rows.length === 0 && (
+          {merged &&
+            visibleMerged.map((r) => {
+              const key = `${r.variable}|||${r.file}`;
+              const exp = expanded.has(key);
+              const long = isLong(r.valueA) || isLong(r.valueB);
+              const valClass = `val${long && !exp ? ' collapsed' : ''}`;
+              return (
+                <tr key={key} className={`st-${r.status}`}>
+                  <td className="var">{r.variable}</td>
+                  <td className="file">{r.file}</td>
+                  <td className="cell">
+                    <div className={valClass}>{cellNodes(r.status, 'A', r.valueA, r.valueB)}</div>
+                    {r.sourceA && <div className="src">← {r.sourceA}</div>}
+                    {exp && <OverrideTrail entries={r.overridesA} />}
+                    {long && (
+                      <button className="more" onClick={() => toggle(key)}>
+                        {exp ? 'Свернуть' : 'Показать ещё'}
+                      </button>
+                    )}
+                  </td>
+                  <td className="cell">
+                    <div className={valClass}>{cellNodes(r.status, 'B', r.valueA, r.valueB)}</div>
+                    {r.sourceB && <div className="src">← {r.sourceB}</div>}
+                    {exp && <OverrideTrail entries={r.overridesB} />}
+                    {long && (
+                      <button className="more" onClick={() => toggle(key)}>
+                        {exp ? 'Свернуть' : 'Показать ещё'}
+                      </button>
+                    )}
+                  </td>
+                  <td className="status">
+                    <span className={`badge st-${r.status}`}>{STATUS_LABEL[r.status]}</span>
+                  </td>
+                </tr>
+              );
+            })}
+
+          {!merged &&
+            visibleGroups.map((g) => {
+              const key = g.variable;
+              const exp = expanded.has(key);
+              const rep = g.rep;
+              const long = isLong(rep.valueA) || isLong(rep.valueB);
+              const multi = g.occ.length > 1;
+              const showExpander = long || multi;
+              const valClass = `val${long && !exp ? ' collapsed' : ''}`;
+              return (
+                <tr key={key} className={`st-${rep.status}`}>
+                  <td className="var">{g.variable}</td>
+                  <td className="file">
+                    {rep.file}
+                    {multi && <span className="muted"> +{g.occ.length - 1}</span>}
+                  </td>
+                  <td className="cell">
+                    <div className={valClass}>{cellNodes(rep.status, 'A', rep.valueA, rep.valueB)}</div>
+                    {exp && multi && <OccList occ={g.occ} side="A" rep={rep} />}
+                    {showExpander && (
+                      <button className="more" onClick={() => toggle(key)}>
+                        {exp ? 'Свернуть' : multi ? `Показать ещё (${g.occ.length} файлов)` : 'Показать ещё'}
+                      </button>
+                    )}
+                  </td>
+                  <td className="cell">
+                    <div className={valClass}>{cellNodes(rep.status, 'B', rep.valueA, rep.valueB)}</div>
+                    {exp && multi && <OccList occ={g.occ} side="B" rep={rep} />}
+                    {showExpander && (
+                      <button className="more" onClick={() => toggle(key)}>
+                        {exp ? 'Свернуть' : 'Показать ещё'}
+                      </button>
+                    )}
+                  </td>
+                  <td className="status">
+                    <span className={`badge st-${rep.status}`}>{STATUS_LABEL[rep.status]}</span>
+                    {g.diverges && (
+                      <span className="badge diverge" title="значения отличаются во вложенных слоях (custom/…)">
+                        слои ≠
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+
+          {shown === 0 && (
             <tr>
               <td colSpan={5} className="empty">
                 нет строк под текущие фильтры
@@ -209,45 +266,34 @@ export function CompareTable({ result }: { result: CompareResult }) {
   );
 }
 
-const csvField = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`;
-
-function buildCsv(rows: UiRow[], merged: boolean): string {
-  const header = merged
-    ? ['Переменная', 'Файл', 'Значение A', 'Источник A', 'Значение B', 'Источник B', 'Статус']
-    : ['Переменная', 'Файл', 'Значение A', 'Значение B', 'Статус'];
-  const lines = [header.map(csvField).join(',')];
-  for (const r of rows) {
-    const cols = merged
-      ? [r.variable, r.file, r.valueA, r.sourceA, r.valueB, r.sourceB, STATUS_LABEL[r.status]]
-      : [r.variable, r.file, r.valueA, r.valueB, STATUS_LABEL[r.status]];
-    lines.push(cols.map(csvField).join(','));
-  }
-  return lines.join('\r\n');
-}
-
-function csvFilename(r: CompareResult): string {
-  const side = (x: { branch: string; env: string }) => `${x.branch}-${x.env}`.replace(/[^\w.-]+/g, '_');
-  return `sledilo_${r.fp}_${side(r.sideA)}_vs_${side(r.sideB)}.csv`;
-}
-
-function downloadCsv(filename: string, csv: string): void {
-  // BOM — чтобы Excel корректно показал кириллицу
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+function OccList({ occ, side, rep }: { occ: Occ[]; side: 'A' | 'B'; rep: Occ }) {
+  const repVal = side === 'A' ? rep.valueA : rep.valueB;
+  return (
+    <div className="occ">
+      <div className="occ-title">вхождения по файлам:</div>
+      {occ.map((o) => {
+        const v = side === 'A' ? o.valueA : o.valueB;
+        const isRoot = o.file === rep.file;
+        const diff = v !== repVal;
+        return (
+          <div key={o.file} className={`occ-row${diff ? ' diff' : ''}${isRoot ? ' root' : ''}`}>
+            <span className="occ-file">
+              {isRoot ? '★ ' : ''}
+              {o.file}
+            </span>
+            <span className="occ-val">{oneLine(v)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function OverrideTrail({ entries }: { entries?: OverrideEntry[] }) {
   if (!entries || entries.length <= 1) return null;
   return (
     <div className="trail">
-      <div className="trail-title">слои:</div>
+      <div className="trail-title">слои (база → глубокий, вклад каждого):</div>
       {entries.map((e, i) => (
         <div key={e.file} className={`trail-row${i === entries.length - 1 ? ' win' : ''}`}>
           <span className="trail-file">{e.file}</span>
@@ -263,9 +309,7 @@ function FileSummaryPanel({ files }: { files: FileSummary[] }) {
   if (diffs.length === 0) return null;
   return (
     <details className="filepanel">
-      <summary>
-        файлы с отличиями по байтам: {diffs.length} (вкл. пробелы/EOL вне значений)
-      </summary>
+      <summary>файлы с отличиями по байтам: {diffs.length} (вкл. пробелы/EOL вне значений)</summary>
       <div className="filepanel-body">
         {diffs.map((f) => (
           <div key={f.path} className="filerow">
@@ -281,4 +325,23 @@ function FileSummaryPanel({ files }: { files: FileSummary[] }) {
       </div>
     </details>
   );
+}
+
+const csvField = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+function csvFilename(r: CompareResult): string {
+  const side = (x: { branch: string; env: string }) => `${x.branch}-${x.env}`.replace(/[^\w.-]+/g, '_');
+  return `sledilo_${r.fp}_${side(r.sideA)}_vs_${side(r.sideB)}.csv`;
+}
+
+function downloadCsv(filename: string, csv: string): void {
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }

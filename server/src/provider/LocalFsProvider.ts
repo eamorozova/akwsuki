@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { FileProvider, RepoFile } from './FileProvider';
+import type { BranchQuery, FileProvider, RepoFile } from './FileProvider';
 
 const YAML_RE = /\.ya?ml$/i;
 
@@ -13,8 +13,13 @@ const YAML_RE = /\.ya?ml$/i;
 export class LocalFsProvider implements FileProvider {
   constructor(private readonly root: string) {}
 
-  async listBranches(): Promise<string[]> {
-    return this.listDirs(this.root);
+  async listBranches(query?: BranchQuery): Promise<string[]> {
+    let dirs = await this.listDirs(this.root);
+    if (query?.filterText) {
+      const q = query.filterText.toLowerCase();
+      dirs = dirs.filter((d) => d.toLowerCase().includes(q));
+    }
+    return query?.limit ? dirs.slice(0, query.limit) : dirs;
   }
 
   async listEnvs(branch: string): Promise<string[]> {

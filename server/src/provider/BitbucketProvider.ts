@@ -1,6 +1,6 @@
 import https from 'node:https';
 import axios from 'axios';
-import type { FileProvider, RepoFile } from './FileProvider';
+import type { BranchQuery, FileProvider, RepoFile } from './FileProvider';
 
 /** Минимальный транспорт (совместим с экземпляром axios); подменяется в тестах. */
 export interface HttpClient {
@@ -60,17 +60,15 @@ export class BitbucketProvider implements FileProvider {
       });
   }
 
-  async listBranches(): Promise<string[]> {
+  async listBranches(query?: BranchQuery): Promise<string[]> {
+    // одна страница, новейшие первыми (orderBy=MODIFICATION); поиск — filterText на сервере
+    const params: Record<string, unknown> = { orderBy: 'MODIFICATION', limit: query?.limit ?? 100 };
+    if (query?.filterText) params.filterText = query.filterText;
+    const page = await this.getPage('/branches', params);
     const out: string[] = [];
-    let start = 0;
-    for (;;) {
-      const page = await this.getPage('/branches', { limit: 100, start });
-      for (const b of page.values ?? []) {
-        const id = (b as { displayId?: string }).displayId;
-        if (id) out.push(id);
-      }
-      if (page.isLastPage !== false || page.nextPageStart == null) break;
-      start = page.nextPageStart;
+    for (const b of page.values ?? []) {
+      const id = (b as { displayId?: string }).displayId;
+      if (id) out.push(id);
     }
     return out;
   }

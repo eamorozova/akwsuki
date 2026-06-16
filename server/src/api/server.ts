@@ -25,9 +25,16 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     return fps.map((name) => ({ name }));
   });
 
-  app.get<{ Params: { fp: string } }>('/api/fp/:fp/branches', async (req) => {
-    return deps.getProvider(req.params.fp).listBranches();
-  });
+  app.get<{ Params: { fp: string }; Querystring: { q?: string; limit?: string } }>(
+    '/api/fp/:fp/branches',
+    async (req) => {
+      const { q, limit } = req.query;
+      return deps.getProvider(req.params.fp).listBranches({
+        filterText: q || undefined,
+        limit: limit ? Number(limit) : undefined,
+      });
+    },
+  );
 
   // ветка передаётся query-параметром: имена веток в Bitbucket могут содержать «/»
   app.get<{ Params: { fp: string }; Querystring: { branch?: string } }>(

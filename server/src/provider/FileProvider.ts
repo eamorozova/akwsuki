@@ -6,6 +6,14 @@ export interface RepoFile {
   content: string;
 }
 
+/** Параметры выборки веток (для поиска по большому списку). */
+export interface BranchQuery {
+  /** Подстрока для серверного поиска по имени ветки. */
+  filterText?: string;
+  /** Ограничение количества (новейшие первыми). */
+  limit?: number;
+}
+
 /**
  * Абстракция доступа к файлам репозитория ФП.
  *
@@ -14,8 +22,8 @@ export interface RepoFile {
  * изменения логики сравнения.
  */
 export interface FileProvider {
-  /** Список веток репозитория. */
-  listBranches(): Promise<string[]>;
+  /** Список веток репозитория (новейшие первыми; с опциональным поиском). */
+  listBranches(query?: BranchQuery): Promise<string[]>;
   /** Список окружений (папок верхнего уровня) в данной ветке. */
   listEnvs(branch: string): Promise<string[]>;
   /** Все *.yaml/*.yml внутри папки-окружения, рекурсивно. */

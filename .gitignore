@@ -1,0 +1,8 @@
+node_modules/
+dist/
+server/demo-data/
+*.log
+.DS_Store
+.env
+.claude
+docs/

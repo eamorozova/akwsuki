@@ -125,11 +125,6 @@ export function StandParamsPage() {
 
   return (
     <>
-      <p className="page-hint">
-        Сравнение параметров стендов из <code>vars/get_stand_params.groovy</code> — двух стендов на
-        произвольных ветках.
-      </p>
-
       <section className="controls">
         <Field label="ФП">
           <select value={fp} onChange={(e) => changeFp(e.target.value)}>
@@ -145,7 +140,7 @@ export function StandParamsPage() {
         <div className="side">
           <span className="side-badge a">A</span>
           <Field label="Ветка 1">
-            <Combobox value={branch1} onChange={setBranch1} disabled={!fp} placeholder="ветка" fetchOptions={(q) => api.branches(fp, q)} />
+            <Combobox value={branch1} onChange={setBranch1} disabled={!fp} placeholder="ветка" fetchOptions={(q) => api.branches(fp, q, 'shared')} />
           </Field>
           <Field label="Стенд 1">{standSelect(stands1, stand1, setStand1, branch1, loading1)}</Field>
         </div>
@@ -153,7 +148,7 @@ export function StandParamsPage() {
         <div className="side">
           <span className="side-badge b">B</span>
           <Field label="Ветка 2">
-            <Combobox value={branch2} onChange={setBranch2} disabled={!fp} placeholder="ветка" fetchOptions={(q) => api.branches(fp, q)} />
+            <Combobox value={branch2} onChange={setBranch2} disabled={!fp} placeholder="ветка" fetchOptions={(q) => api.branches(fp, q, 'shared')} />
           </Field>
           <Field label="Стенд 2">{standSelect(stands2, stand2, setStand2, branch2, loading2)}</Field>
         </div>

@@ -147,7 +147,7 @@ export function ReleaseDeltaPage() {
 
       {loading && (
         <div className="loading-block">
-          <span className="spinner" /> Загрузка сравнения… (читаются 4 стенда)
+          <span className="spinner" /> Загрузка сравнения…
         </div>
       )}
 

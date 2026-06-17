@@ -43,14 +43,12 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     return fps.map((name) => ({ name }));
   });
 
-  app.get<{ Params: { fp: string }; Querystring: { q?: string; limit?: string } }>(
+  app.get<{ Params: { fp: string }; Querystring: { q?: string; limit?: string; repo?: string } }>(
     '/api/fp/:fp/branches',
     async (req) => {
-      const { q, limit } = req.query;
-      return deps.getProvider(req.params.fp).listBranches({
-        filterText: q || undefined,
-        limit: limit ? Number(limit) : undefined,
-      });
+      const { q, limit, repo } = req.query;
+      const provider = repo === 'shared' ? deps.getSharedProvider(req.params.fp) : deps.getProvider(req.params.fp);
+      return provider.listBranches({ filterText: q || undefined, limit: limit ? Number(limit) : undefined });
     },
   );
 

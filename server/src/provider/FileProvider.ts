@@ -28,4 +28,6 @@ export interface FileProvider {
   listEnvs(branch: string): Promise<string[]>;
   /** Все *.yaml/*.yml внутри папки-окружения, рекурсивно. */
   readEnvYamlFiles(branch: string, env: string): Promise<RepoFile[]>;
+  /** Содержимое одного файла по пути на ветке; null, если файла нет. */
+  readFile(branch: string, filePath: string): Promise<string | null>;
 }

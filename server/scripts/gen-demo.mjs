@@ -60,4 +60,39 @@ for (const [fp, branches] of Object.entries(SPEC)) {
     }
   }
 }
+
+// shared_libs: файл параметров стендов (vars/get_stand_params.groovy) — для страницы «Параметры стендов»
+function standParamsFile(fp, branch) {
+  const f = fp.toLowerCase();
+  const tag = branch === 'release' ? '-r2' : '';
+  return `def call() {
+standparams = [
+        [
+                'STAND_ALIAS': "DEVOPS (DEV)",
+                'ENV_ALIAS': "DEV",
+                'ALLOWEDUSERS': [
+                        '2adso', '1947daskin', '173dsakin'
+                ],
+                'VAULT_STORE': "${f}-dev-vault${tag}",
+                'VAULT_TOKEN': '123',
+        ],
+        [
+                'STAND_ALIAS': "PSI (PSI-DE)",
+                'ENV_ALIAS': "PSI-DE",
+                'VAULT_STORE': "${f}-psi-vault",
+                'ISTIO_CONTROL_PLANE': "ci0el${tag}",
+        ]
+]
+return standparams
+}`;
+}
+
+for (const [fp, branches] of Object.entries(SPEC)) {
+  for (const branch of branches) {
+    const full = path.join(OUT, `${fp}__shared`, branch, 'vars', 'get_stand_params.groovy');
+    await fs.mkdir(path.dirname(full), { recursive: true });
+    await fs.writeFile(full, standParamsFile(fp, branch));
+  }
+}
+
 console.log('demo-data generated at', OUT);

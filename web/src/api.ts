@@ -1,4 +1,11 @@
-import type { CompareMode, CompareReleaseDeltaResult, CompareResult, CompareSide } from './types';
+import type {
+  CompareMode,
+  CompareReleaseDeltaResult,
+  CompareResult,
+  CompareSide,
+  CompareStandsResult,
+  StandInfo,
+} from './types';
 
 async function j<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, init);
@@ -35,5 +42,13 @@ export const api = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ fp, env1, env2, branchR1, branchR2 }),
+    }),
+  stands: (fp: string, branch: string) =>
+    j<StandInfo[]>(`/api/fp/${encodeURIComponent(fp)}/stands?branch=${encodeURIComponent(branch)}`),
+  compareStands: (fp: string, branch1: string, stand1: string, branch2: string, stand2: string) =>
+    j<CompareStandsResult>('/api/compare-stands', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fp, branch1, stand1, branch2, stand2 }),
     }),
 };

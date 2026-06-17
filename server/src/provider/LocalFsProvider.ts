@@ -26,6 +26,14 @@ export class LocalFsProvider implements FileProvider {
     return this.listDirs(path.join(this.root, branch));
   }
 
+  async readFile(branch: string, filePath: string): Promise<string | null> {
+    try {
+      return await fs.readFile(path.join(this.root, branch, ...filePath.split('/')), 'utf8');
+    } catch {
+      return null;
+    }
+  }
+
   async readEnvYamlFiles(branch: string, env: string): Promise<RepoFile[]> {
     const base = path.join(this.root, branch, env);
     const out: RepoFile[] = [];

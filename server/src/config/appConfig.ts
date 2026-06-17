@@ -17,7 +17,13 @@ const PROJECT_ROOT = path.resolve(SERVER_ROOT, '..');
 export interface ServerDeps {
   listFps(): Promise<string[]>;
   getProvider(fp: string): FileProvider;
+  /** Провайдер репозитория shared_libs (для параметров стендов). */
+  getSharedProvider(fp: string): FileProvider;
+  /** Путь к файлу параметров стендов внутри shared_libs репо. */
+  standParamsPath: string;
 }
+
+const DEFAULT_STAND_PARAMS_PATH = process.env.STAND_PARAMS_PATH ?? 'vars/get_stand_params.groovy';
 
 /** Выбор источника данных по `DATA_MODE` (`local` | `bitbucket`), по умолчанию `local`. */
 export function buildDeps(): ServerDeps {
@@ -37,7 +43,10 @@ export function buildLocalDeps(): ServerDeps {
     async listFps() {
       try {
         const entries = await fs.readdir(demoDir, { withFileTypes: true });
-        return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+        return entries
+          .filter((e) => e.isDirectory() && !e.name.endsWith('__shared'))
+          .map((e) => e.name)
+          .sort();
       } catch {
         return [];
       }
@@ -45,13 +54,18 @@ export function buildLocalDeps(): ServerDeps {
     getProvider(fp: string) {
       return new LocalFsProvider(path.join(demoDir, fp));
     },
+    getSharedProvider(fp: string) {
+      return new LocalFsProvider(path.join(demoDir, `${fp}__shared`));
+    },
+    standParamsPath: DEFAULT_STAND_PARAMS_PATH,
   };
 }
 
 interface FpConfig {
   bitbucketUrl: string;
   project: string;
-  fps: { name: string; repo: string }[];
+  standParamsPath?: string;
+  fps: { name: string; repo: string; sharedLibsRepo?: string }[];
 }
 
 function loadFpConfig(): FpConfig {
@@ -72,6 +86,9 @@ export function buildBitbucketDeps(): ServerDeps {
   const token = process.env.BITBUCKET_TOKEN ?? '';
   const rejectUnauthorized = process.env.BITBUCKET_TLS_REJECT === '1';
   const repos = new Map(cfg.fps.map((f) => [f.name, f.repo] as const));
+  const sharedRepos = new Map(cfg.fps.map((f) => [f.name, f.sharedLibsRepo] as const));
+  const mkProvider = (repo: string) =>
+    new BitbucketProvider({ baseUrl: cfg.bitbucketUrl, project: cfg.project, repo, token, rejectUnauthorized });
 
   return {
     async listFps() {
@@ -80,7 +97,13 @@ export function buildBitbucketDeps(): ServerDeps {
     getProvider(fp: string) {
       const repo = repos.get(fp);
       if (!repo) throw new Error(`unknown fp: ${fp}`);
-      return new BitbucketProvider({ baseUrl: cfg.bitbucketUrl, project: cfg.project, repo, token, rejectUnauthorized });
+      return mkProvider(repo);
     },
+    getSharedProvider(fp: string) {
+      const repo = sharedRepos.get(fp);
+      if (!repo) throw new Error(`no sharedLibsRepo configured for fp: ${fp}`);
+      return mkProvider(repo);
+    },
+    standParamsPath: cfg.standParamsPath ?? DEFAULT_STAND_PARAMS_PATH,
   };
 }

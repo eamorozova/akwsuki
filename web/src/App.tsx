@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { ComparePage } from './pages/ComparePage';
 import { ReleaseDeltaPage } from './pages/ReleaseDeltaPage';
+import { StandParamsPage } from './pages/StandParamsPage';
 
 type Theme = 'light' | 'dark';
 
@@ -25,6 +26,9 @@ export function App() {
           <NavLink to="/release-delta" className={({ isActive }) => (isActive ? 'active' : '')}>
             Дельта релизов
           </NavLink>
+          <NavLink to="/stand-params" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Параметры стендов
+          </NavLink>
         </nav>
         <button className="theme" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Тема">
           {theme === 'light' ? '🌙' : '☀️'}
@@ -35,6 +39,7 @@ export function App() {
         <Route path="/" element={<Navigate to="/compare" replace />} />
         <Route path="/compare" element={<ComparePage />} />
         <Route path="/release-delta" element={<ReleaseDeltaPage />} />
+        <Route path="/stand-params" element={<StandParamsPage />} />
         <Route path="*" element={<Navigate to="/compare" replace />} />
       </Routes>
     </div>

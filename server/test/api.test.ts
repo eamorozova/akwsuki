@@ -25,6 +25,12 @@ beforeAll(async () => {
   await write('SDS/release/DEV/postgres.yaml', 'postgres:\n  host: db-dev2\n'); // изменено релизом на DEV
   await write('SDS/release/IFT-DE/postgres.yaml', 'postgres:\n  host: db-ift\n'); // на IFT-DE не изменилось
 
+  // shared_libs: параметры стендов
+  const standsFile = (vault: string) =>
+    `def call() {\nstandparams = [\n  [ 'STAND_ALIAS': "DEVOPS (DEV)", 'ENV_ALIAS': "DEV", 'VAULT_STORE': "${vault}" ],\n  [ 'STAND_ALIAS': "PSI", 'ENV_ALIAS': "PSI-DE", 'VAULT_STORE': "CI111" ],\n]\nreturn standparams\n}`;
+  await write('SDS__shared/master/vars/get_stand_params.groovy', standsFile('Cqwe'));
+  await write('SDS__shared/release/vars/get_stand_params.groovy', standsFile('Cqwe2'));
+
   const deps: ServerDeps = {
     async listFps() {
       return ['SDS'];
@@ -32,6 +38,10 @@ beforeAll(async () => {
     getProvider(fp) {
       return new LocalFsProvider(path.join(root, fp));
     },
+    getSharedProvider(fp) {
+      return new LocalFsProvider(path.join(root, `${fp}__shared`));
+    },
+    standParamsPath: 'vars/get_stand_params.groovy',
   };
   app = await buildServer(deps);
 });
@@ -97,6 +107,33 @@ describe('API', () => {
 
   it('POST /api/compare-release-delta валидирует тело → 400', async () => {
     const r = await app.inject({ method: 'POST', url: '/api/compare-release-delta', payload: { fp: 'SDS' } });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it('GET /api/fp/:fp/stands возвращает стенды из groovy-файла', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/fp/SDS/stands?branch=master' });
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { alias: string; env: string }[];
+    expect(body.map((s) => s.alias)).toEqual(['DEVOPS (DEV)', 'PSI']);
+  });
+
+  it('POST /api/compare-stands сравнивает параметры стендов', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/compare-stands',
+      payload: { fp: 'SDS', branch1: 'master', stand1: 'DEVOPS (DEV)', branch2: 'release', stand2: 'DEVOPS (DEV)' },
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { rows: { param: string; valueA: string; valueB: string; status: string }[] };
+    const vault = body.rows.find((x) => x.param === 'VAULT_STORE');
+    expect(vault?.valueA).toBe('Cqwe');
+    expect(vault?.valueB).toBe('Cqwe2');
+    expect(vault?.status).toBe('different');
+    expect(body.rows.find((x) => x.param === 'ENV_ALIAS')?.status).toBe('equal');
+  });
+
+  it('POST /api/compare-stands валидирует тело → 400', async () => {
+    const r = await app.inject({ method: 'POST', url: '/api/compare-stands', payload: { fp: 'SDS' } });
     expect(r.statusCode).toBe(400);
   });
 

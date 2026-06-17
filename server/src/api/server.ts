@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import type { ServerDeps } from '../config/appConfig';
 import { compareByFile, compareMerged } from '../compare/compare';
 import { compareReleaseDelta } from '../compare/releaseDelta';
+import { compareStands, listStands } from '../standparams/compareStands';
 import type { CompareSide } from '../domain/types';
 
 interface CompareBody {
@@ -19,6 +20,14 @@ interface ReleaseDeltaBody {
   env2?: string;
   branchR1?: string;
   branchR2?: string;
+}
+
+interface CompareStandsBody {
+  fp?: string;
+  branch1?: string;
+  stand1?: string;
+  branch2?: string;
+  stand2?: string;
 }
 
 const dirOf = (p: string): string => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
@@ -112,6 +121,47 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     console.log(`${label} — старт`);
     try {
       const res = await compareReleaseDelta(deps.getProvider(fp!), fp!, env1!, env2!, branchR1!, branchR2!);
+      console.log(`${label} — готово: строк=${res.rows.length} за ${Date.now() - t0}ms`);
+      return res;
+    } catch (e) {
+      console.error(`${label} — ошибка за ${Date.now() - t0}ms: ${(e as Error).message}`);
+      reply.code(502);
+      return { error: (e as Error).message };
+    }
+  });
+
+  // стенды из get_stand_params.groovy на ветке (для выпадающих списков)
+  app.get<{ Params: { fp: string }; Querystring: { branch?: string } }>(
+    '/api/fp/:fp/stands',
+    async (req, reply) => {
+      const branch = req.query.branch;
+      if (!branch) {
+        reply.code(400);
+        return { error: 'query param "branch" is required' };
+      }
+      return listStands(deps.getSharedProvider(req.params.fp), branch, deps.standParamsPath);
+    },
+  );
+
+  app.post<{ Body: CompareStandsBody }>('/api/compare-stands', async (req, reply) => {
+    const { fp, branch1, stand1, branch2, stand2 } = req.body ?? {};
+    if (![fp, branch1, stand1, branch2, stand2].every((v) => typeof v === 'string' && v)) {
+      reply.code(400);
+      return { error: 'fp, branch1, stand1, branch2, stand2 are required' };
+    }
+    const t0 = Date.now();
+    const label = `[stands] ${fp} ${branch1}:${stand1} vs ${branch2}:${stand2}`;
+    console.log(`${label} — старт`);
+    try {
+      const res = await compareStands(
+        deps.getSharedProvider(fp!),
+        fp!,
+        branch1!,
+        stand1!,
+        branch2!,
+        stand2!,
+        deps.standParamsPath,
+      );
       console.log(`${label} — готово: строк=${res.rows.length} за ${Date.now() - t0}ms`);
       return res;
     } catch (e) {

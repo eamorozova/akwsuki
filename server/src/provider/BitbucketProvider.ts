@@ -95,6 +95,15 @@ export class BitbucketProvider implements FileProvider {
     return files;
   }
 
+  async readFile(branch: string, filePath: string): Promise<string | null> {
+    try {
+      return await this.raw(filePath, branch);
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response?.status === 404) return null;
+      throw e;
+    }
+  }
+
   /** Список путей файлов под каталогом (рекурсивно), относительно него. */
   private async listFiles(dir: string, branch: string): Promise<string[]> {
     const out: string[] = [];

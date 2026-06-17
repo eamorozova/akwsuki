@@ -157,3 +157,27 @@ export interface CompareReleaseDeltaResult {
   rows: RowReleaseDelta[];
   stats: ReleaseDeltaStats;
 }
+
+/** Краткое описание стенда из get_stand_params.groovy. */
+export interface StandInfo {
+  alias: string;
+  env: string;
+}
+
+/** Строка сравнения параметров стендов (параметр — отдельная строка). */
+export interface StandParamRow {
+  param: string;
+  valueA: string | null;
+  valueB: string | null;
+  status: RowStatus;
+}
+
+export interface CompareStandsResult {
+  fp: string;
+  branch1: string;
+  stand1: string;
+  branch2: string;
+  stand2: string;
+  rows: StandParamRow[];
+  stats: CompareStats;
+}

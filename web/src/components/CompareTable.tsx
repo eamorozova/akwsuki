@@ -271,7 +271,12 @@ export function CompareTable({ result }: { result: CompareResult }) {
                   {exp && multi && (
                     <tr className="detail">
                       <td colSpan={5}>
-                        <OccTable occ={g.occ} sideA={`${result.sideA.branch}/${result.sideA.env}`} sideB={`${result.sideB.branch}/${result.sideB.env}`} />
+                        <OccTable
+                          variable={g.variable}
+                          occ={g.occ}
+                          sideA={`${result.sideA.branch}/${result.sideA.env}`}
+                          sideB={`${result.sideB.branch}/${result.sideB.env}`}
+                        />
                       </td>
                     </tr>
                   )}
@@ -303,34 +308,39 @@ export function CompareTable({ result }: { result: CompareResult }) {
 }
 
 /** Табличный вид вхождений переменной по файлам: каждый файл сравнивается A↔B на своём уровне. */
-function OccTable({ occ, sideA, sideB }: { occ: Occ[]; sideA: string; sideB: string }) {
+function OccTable({ variable, occ, sideA, sideB }: { variable: string; occ: Occ[]; sideA: string; sideB: string }) {
   return (
-    <table className="occ-table">
-      <thead>
-        <tr>
-          <th>Файл (уровень)</th>
-          <th>A · {sideA}</th>
-          <th>B · {sideB}</th>
-          <th>Статус</th>
-        </tr>
-      </thead>
-      <tbody>
-        {occ.map((o) => (
-          <tr key={o.file} className={o.status !== 'equal' ? 'diff' : ''}>
-            <td className="occ-file">{o.file}</td>
-            <td className="occ-val">
-              <div className="val">{cellNodes(o.status, 'A', o.valueA, o.valueB)}</div>
-            </td>
-            <td className="occ-val">
-              <div className="val">{cellNodes(o.status, 'B', o.valueA, o.valueB)}</div>
-            </td>
-            <td>
-              <span className={`badge st-${o.status}`}>{STATUS_LABEL[o.status]}</span>
-            </td>
+    <div className="occ-wrap">
+      <div className="occ-caption">
+        вхождения переменной «<b>{variable}</b>» по файлам:
+      </div>
+      <table className="occ-table">
+        <thead>
+          <tr>
+            <th>Файл</th>
+            <th>A · {sideA}</th>
+            <th>B · {sideB}</th>
+            <th>Статус</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {occ.map((o) => (
+            <tr key={o.file} className={o.status !== 'equal' ? 'diff' : ''}>
+              <td className="occ-file">{o.file}</td>
+              <td className="occ-val">
+                <div className="val">{previewNodes(o.status, 'A', o.valueA, o.valueB)}</div>
+              </td>
+              <td className="occ-val">
+                <div className="val">{previewNodes(o.status, 'B', o.valueA, o.valueB)}</div>
+              </td>
+              <td>
+                <span className={`badge st-${o.status}`}>{STATUS_LABEL[o.status]}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -357,14 +367,14 @@ const REASON_LABEL: Record<string, string> = {
 };
 
 function FileSummaryPanel({ files }: { files: FileSummary[] }) {
-  const diffs = files.filter((f) => f.status !== 'equal');
+  // только «невидимые» различия — то, что НЕ видно в сравнении переменных
+  const diffs = files.filter((f) => f.reason === 'eol' || f.reason === 'whitespace');
   if (diffs.length === 0) return null;
   const shown = diffs.slice(0, 200);
   return (
     <details className="filepanel">
       <summary>
-        файлы, различающиеся побайтово: {diffs.length} — невидимое в сравнении переменных (пробелы,
-        переносы CRLF/LF, порядок ключей, комментарии)
+        файлы, различающиеся только форматированием: {diffs.length}
       </summary>
       <div className="filepanel-body">
         {shown.map((f) => (

@@ -467,7 +467,16 @@ button.loadmore {
 
 tr.detail > td {
   background: var(--panel-2);
-  padding: 8px 12px 12px;
+  padding: 8px 16px 14px 64px; /* сдвиг вправо — видно, что это раскрытие строки выше */
+  border-left: 3px solid var(--accent);
+}
+.occ-caption {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.occ-caption b {
+  color: var(--text);
 }
 table.occ-table {
   width: 100%;

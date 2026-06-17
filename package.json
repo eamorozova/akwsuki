@@ -2,7 +2,7 @@
   "name": "sledilo",
   "version": "0.1.0",
   "private": true,
-  "description": "Сервис сверки конфигов стендов",
+  "description": "Сервис сравнения конфигов стендов",
   "workspaces": [
     "server",
     "web"

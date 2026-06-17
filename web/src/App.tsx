@@ -64,19 +64,18 @@ export function App() {
     localStorage.setItem(PREFS_KEY, JSON.stringify({ fp, branchA, branchB, envA, envB, mode, scope }));
   }, [fp, branchA, branchB, envA, envB, mode, scope]);
 
-  // сброс зависимых выборов при РЕАЛЬНОЙ смене ФП (сравниваем с прошлым значением —
-  // устойчиво к двойному запуску эффектов в React StrictMode и к восстановлению из prefs)
-  const prevFp = useRef(fp);
-  useEffect(() => {
-    if (prevFp.current === fp) return;
-    prevFp.current = fp;
+  // смена ФП: сбрасываем зависимые выборы АТОМАРНО (одним обновлением), чтобы эффекты
+  // не успели запросить envs/scopes со старой веткой (её нет в новом репо → 404).
+  // Восстановление из prefs идёт через initial state и сюда НЕ попадает.
+  const changeFp = (newFp: string) => {
+    setFp(newFp);
     setBranchA('');
     setBranchB('');
     setEnvA('');
     setEnvB('');
     setScope('');
     setResult(null);
-  }, [fp]);
+  };
 
   // окружения стороны A: грузим и сохраняем выбор, если он валиден в новой ветке
   useEffect(() => {
@@ -152,7 +151,7 @@ export function App() {
     <div className="app">
       <header>
         <h1>sledilo</h1>
-        <span className="sub">сверка конфигов стендов</span>
+        <span className="sub">сравнения конфигов стендов</span>
         <button className="theme" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Тема">
           {theme === 'light' ? '🌙' : '☀️'}
         </button>

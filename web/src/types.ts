@@ -76,3 +76,37 @@ export interface CompareResultMerged {
 }
 
 export type CompareResult = CompareResultByFile | CompareResultMerged;
+
+export type ReleaseVerdict = 'both_unchanged' | 'same_change' | 'only_env1' | 'only_env2' | 'divergent';
+
+export interface RowReleaseDelta {
+  variable: string;
+  file: string;
+  env1R1: string | null;
+  env1R2: string | null;
+  statusEnv1: RowStatus;
+  env2R1: string | null;
+  env2R2: string | null;
+  statusEnv2: RowStatus;
+  verdict: ReleaseVerdict;
+  expectedEnvDiff: boolean;
+}
+
+export interface ReleaseDeltaStats {
+  total: number;
+  bothUnchanged: number;
+  sameChange: number;
+  onlyEnv1: number;
+  onlyEnv2: number;
+  divergent: number;
+}
+
+export interface CompareReleaseDeltaResult {
+  fp: string;
+  env1: string;
+  env2: string;
+  branchR1: string;
+  branchR2: string;
+  rows: RowReleaseDelta[];
+  stats: ReleaseDeltaStats;
+}

@@ -21,6 +21,9 @@ beforeAll(async () => {
   await write('SDS/master/IFT-DE/postgres.yaml', 'postgres:\n  host: db-ift\n');
   await write('SDS/master/DEV/custom/sds-api/postgres.yaml', 'postgres:\n  host: dev-api\n');
   await write('SDS/master/IFT-DE/custom/sds-api/postgres.yaml', 'postgres:\n  host: ift-api\n');
+  // ветка release для проверки «дельты релизов»
+  await write('SDS/release/DEV/postgres.yaml', 'postgres:\n  host: db-dev2\n'); // изменено релизом на DEV
+  await write('SDS/release/IFT-DE/postgres.yaml', 'postgres:\n  host: db-ift\n'); // на IFT-DE не изменилось
 
   const deps: ServerDeps = {
     async listFps() {
@@ -78,6 +81,23 @@ describe('API', () => {
     const r = await app.inject({ method: 'GET', url: '/api/fp/SDS/scopes?branch=master&env=DEV' });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual(['', 'custom/sds-api']);
+  });
+
+  it('POST /api/compare-release-delta — изменение релиза только на одном стенде', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/compare-release-delta',
+      payload: { fp: 'SDS', env1: 'DEV', env2: 'IFT-DE', branchR1: 'master', branchR2: 'release' },
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { rows: { variable: string; file: string; verdict: string }[] };
+    const row = body.rows.find((x) => x.variable === 'postgres' && x.file === 'postgres.yaml');
+    expect(row?.verdict).toBe('only_env1');
+  });
+
+  it('POST /api/compare-release-delta валидирует тело → 400', async () => {
+    const r = await app.inject({ method: 'POST', url: '/api/compare-release-delta', payload: { fp: 'SDS' } });
+    expect(r.statusCode).toBe(400);
   });
 
   it('POST /api/compare mode=merged применяет цепочку переопределения', async () => {

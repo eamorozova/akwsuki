@@ -610,3 +610,100 @@ table.occ-table .occ-file {
 td.status .badge {
   white-space: nowrap;
 }
+
+/* ---- навигация между страницами ---- */
+.nav {
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+  align-self: center;
+}
+.nav a {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  border: 1px solid transparent;
+}
+.nav a:hover {
+  color: var(--text);
+}
+.nav a.active {
+  background: var(--panel);
+  color: var(--accent);
+  border-color: var(--border);
+}
+.page-hint {
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+/* ---- бейджи релизов / окружений в форме ---- */
+.side-badge.r1 {
+  background: var(--only-a);
+}
+.side-badge.r2 {
+  background: var(--only-b);
+}
+
+/* ---- ячейка-дельта (релиз1 → релиз2) ---- */
+col.c-verdict {
+  width: 210px;
+}
+.delta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dline {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.rtag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.dline .val {
+  flex: 1 1 auto;
+}
+
+/* ---- вердикты «дельты релизов» ---- */
+.badge.vd-only_env1 {
+  color: var(--only-a);
+  border-color: color-mix(in srgb, var(--only-a) 40%, transparent);
+  background: color-mix(in srgb, var(--only-a) 14%, transparent);
+}
+.badge.vd-only_env2 {
+  color: var(--only-b);
+  border-color: color-mix(in srgb, var(--only-b) 40%, transparent);
+  background: color-mix(in srgb, var(--only-b) 14%, transparent);
+}
+.badge.vd-divergent {
+  color: var(--diff);
+  border-color: color-mix(in srgb, var(--diff) 40%, transparent);
+  background: color-mix(in srgb, var(--diff) 14%, transparent);
+}
+.badge.vd-same_change {
+  color: var(--eq);
+  border-color: color-mix(in srgb, var(--eq) 40%, transparent);
+  background: color-mix(in srgb, var(--eq) 14%, transparent);
+}
+.badge.vd-both_unchanged {
+  color: var(--muted);
+  border-color: var(--border);
+}
+.badge.env-expected {
+  margin-left: 6px;
+  color: var(--muted);
+  border-color: var(--border);
+  background: transparent;
+  font-weight: 500;
+}

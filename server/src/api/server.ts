@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { ServerDeps } from '../config/appConfig';
 import { compareByFile, compareMerged } from '../compare/compare';
+import { compareReleaseDelta } from '../compare/releaseDelta';
 import type { CompareSide } from '../domain/types';
 
 interface CompareBody {
@@ -10,6 +11,14 @@ interface CompareBody {
   sideB?: Partial<CompareSide>;
   mode?: string;
   scope?: string;
+}
+
+interface ReleaseDeltaBody {
+  fp?: string;
+  env1?: string;
+  env2?: string;
+  branchR1?: string;
+  branchR2?: string;
 }
 
 const dirOf = (p: string): string => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
@@ -83,6 +92,26 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         mode === 'merged'
           ? await compareMerged(provider, fp!, a, b, scope ?? '')
           : await compareByFile(provider, fp!, a, b);
+      console.log(`${label} — готово: строк=${res.rows.length} за ${Date.now() - t0}ms`);
+      return res;
+    } catch (e) {
+      console.error(`${label} — ошибка за ${Date.now() - t0}ms: ${(e as Error).message}`);
+      reply.code(502);
+      return { error: (e as Error).message };
+    }
+  });
+
+  app.post<{ Body: ReleaseDeltaBody }>('/api/compare-release-delta', async (req, reply) => {
+    const { fp, env1, env2, branchR1, branchR2 } = req.body ?? {};
+    if (![fp, env1, env2, branchR1, branchR2].every((v) => typeof v === 'string' && v)) {
+      reply.code(400);
+      return { error: 'fp, env1, env2, branchR1, branchR2 are required' };
+    }
+    const t0 = Date.now();
+    const label = `[release-delta] ${fp} ${env1}/${env2} ${branchR1}→${branchR2}`;
+    console.log(`${label} — старт`);
+    try {
+      const res = await compareReleaseDelta(deps.getProvider(fp!), fp!, env1!, env2!, branchR1!, branchR2!);
       console.log(`${label} — готово: строк=${res.rows.length} за ${Date.now() - t0}ms`);
       return res;
     } catch (e) {

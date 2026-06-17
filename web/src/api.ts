@@ -1,4 +1,4 @@
-import type { CompareMode, CompareResult, CompareSide } from './types';
+import type { CompareMode, CompareReleaseDeltaResult, CompareResult, CompareSide } from './types';
 
 async function j<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, init);
@@ -29,5 +29,11 @@ export const api = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ fp, sideA, sideB, mode, scope }),
+    }),
+  compareReleaseDelta: (fp: string, env1: string, env2: string, branchR1: string, branchR2: string) =>
+    j<CompareReleaseDeltaResult>('/api/compare-release-delta', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fp, env1, env2, branchR1, branchR2 }),
     }),
 };

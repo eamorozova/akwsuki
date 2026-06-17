@@ -111,3 +111,49 @@ export interface CompareResultMerged {
   rows: RowMerged[];
   stats: CompareStats;
 }
+
+/**
+ * Вердикт «дельты релизов»: как соотносятся изменения релиз1→релиз2 на двух стендах.
+ */
+export type ReleaseVerdict =
+  | 'both_unchanged' // релиз не трогал переменную ни на одном стенде
+  | 'same_change' // изменена одинаково (совпали и до, и после)
+  | 'only_env1' // изменена только на стенде 1
+  | 'only_env2' // изменена только на стенде 2
+  | 'divergent'; // изменена на обоих, но по-разному
+
+/** Строка сравнения «дельты релизов» (сравнение второго порядка). */
+export interface RowReleaseDelta {
+  variable: string;
+  file: string;
+  /** Стенд 1: значение на релиз1 / релиз2 и статус изменения релизом. */
+  env1R1: string | null;
+  env1R2: string | null;
+  statusEnv1: RowStatus;
+  /** Стенд 2: значение на релиз1 / релиз2 и статус изменения релизом. */
+  env2R1: string | null;
+  env2R2: string | null;
+  statusEnv2: RowStatus;
+  verdict: ReleaseVerdict;
+  /** Значения различались между стендами уже на релиз1 (вероятно, специфика окружения). */
+  expectedEnvDiff: boolean;
+}
+
+export interface ReleaseDeltaStats {
+  total: number;
+  bothUnchanged: number;
+  sameChange: number;
+  onlyEnv1: number;
+  onlyEnv2: number;
+  divergent: number;
+}
+
+export interface CompareReleaseDeltaResult {
+  fp: string;
+  env1: string;
+  env2: string;
+  branchR1: string;
+  branchR2: string;
+  rows: RowReleaseDelta[];
+  stats: ReleaseDeltaStats;
+}

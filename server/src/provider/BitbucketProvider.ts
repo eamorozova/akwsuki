@@ -110,8 +110,14 @@ export class BitbucketProvider implements FileProvider {
   }
 
   private async getPage(url: string, params: Record<string, unknown>): Promise<BitbucketPage> {
-    const { data } = await this.http.get(url, { params });
-    return (data ?? {}) as BitbucketPage;
+    try {
+      const { data } = await this.http.get(url, { params });
+      return (data ?? {}) as BitbucketPage;
+    } catch (e) {
+      // неизвестная ветка/ref/путь → трактуем как пустой список (а не ошибку)
+      if (axios.isAxiosError(e) && e.response?.status === 404) return {};
+      throw e;
+    }
   }
 
   /** Сырой текст файла (без парсинга/нормализации — сохраняем пробелы и CRLF). */

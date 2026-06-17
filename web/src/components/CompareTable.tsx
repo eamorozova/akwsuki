@@ -113,16 +113,6 @@ export function CompareTable({ result }: { result: CompareResult }) {
   const shownGroups = visibleGroups.slice(0, limit);
   const rendered = merged ? shownMerged.length : shownGroups.length;
 
-  const exportCsv = () => {
-    const rows = merged
-      ? visibleMerged.map((r) => [r.variable, r.file, r.valueA, r.sourceA, r.valueB, r.sourceB, STATUS_LABEL[r.status]])
-      : visibleGroups.flatMap((g) => g.occ.map((o) => [g.variable, o.file, o.valueA, o.valueB, STATUS_LABEL[o.status]]));
-    const header = merged
-      ? ['Переменная', 'Файл', 'Значение A', 'Источник A', 'Значение B', 'Источник B', 'Статус']
-      : ['Переменная', 'Файл', 'Значение A', 'Значение B', 'Статус'];
-    downloadCsv(csvFilename(result), [header, ...rows].map((cols) => cols.map(csvField).join(',')).join('\r\n'));
-  };
-
   return (
     <div className="result">
       <div className="stats">
@@ -161,9 +151,6 @@ export function CompareTable({ result }: { result: CompareResult }) {
           </div>
         )}
         <span className="muted">показано: {rendered} из {total}</span>
-        <button className="export" disabled={total === 0} onClick={exportCsv}>
-          Экспорт CSV
-        </button>
       </div>
 
       <table className="cmp">
@@ -395,21 +382,3 @@ function FileSummaryPanel({ files }: { files: FileSummary[] }) {
   );
 }
 
-const csvField = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`;
-
-function csvFilename(r: CompareResult): string {
-  const side = (x: { branch: string; env: string }) => `${x.branch}-${x.env}`.replace(/[^\w.-]+/g, '_');
-  return `sledilo_${r.fp}_${side(r.sideA)}_vs_${side(r.sideB)}.csv`;
-}
-
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}

@@ -40,15 +40,6 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
   const s = result.stats;
   const shown = visible.slice(0, limit);
 
-  const exportCsv = () => {
-    const header = ['Параметр', `${result.branch1}·${result.stand1}`, `${result.branch2}·${result.stand2}`, 'Статус'];
-    const rows = visible.map((r) => [r.param, r.valueA, r.valueB, STATUS_LABEL[r.status]]);
-    downloadCsv(
-      `sledilo_stands_${result.fp}_${result.stand1}_vs_${result.stand2}.csv`.replace(/[^\w.-]+/g, '_'),
-      [header, ...rows].map((cols) => cols.map(csvField).join(',')).join('\r\n'),
-    );
-  };
-
   return (
     <div className="result">
       <div className="stats">
@@ -66,9 +57,6 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
         </label>
         <input className="search" placeholder="поиск по параметру…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <span className="muted">показано: {shown.length} из {visible.length}</span>
-        <button className="export" disabled={visible.length === 0} onClick={exportCsv}>
-          Экспорт CSV
-        </button>
       </div>
 
       <table className="cmp">
@@ -140,18 +128,4 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
       </table>
     </div>
   );
-}
-
-const csvField = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`;
-
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }

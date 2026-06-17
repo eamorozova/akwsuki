@@ -117,7 +117,6 @@ export function StandParamsPage() {
       {stands.map((s) => (
         <option key={s.alias} value={s.alias}>
           {s.alias}
-          {s.env ? ` · ${s.env}` : ''}
         </option>
       ))}
     </select>

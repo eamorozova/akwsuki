@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import type { ServerDeps } from '../config/appConfig';
 import { compareByFile, compareMerged } from '../compare/compare';
 import { compareReleaseDelta } from '../compare/releaseDelta';
@@ -32,7 +33,12 @@ interface CompareStandsBody {
 
 const dirOf = (p: string): string => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
 
-export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
+export interface ServerOptions {
+  /** Каталог собранного фронтенда (web/dist) для отдачи статики + SPA-fallback. */
+  webDist?: string;
+}
+
+export async function buildServer(deps: ServerDeps, opts: ServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true }); // dev: разрешаем фронт с Vite-порта
 
@@ -168,6 +174,17 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       return { error: (e as Error).message };
     }
   });
+
+  // прод: отдаём собранный фронт (web/dist) + SPA-fallback на index.html
+  if (opts.webDist) {
+    await app.register(fastifyStatic, { root: opts.webDist, prefix: '/' });
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method === 'GET' && !req.url.startsWith('/api')) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ error: 'not found' });
+    });
+  }
 
   return app;
 }

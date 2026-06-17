@@ -52,24 +52,6 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
   const s = result.stats;
   const shown = visible.slice(0, limit);
 
-  const exportCsv = () => {
-    const header = ['Переменная', 'Файл', 'Окр1·р1', 'Окр1·р2', 'Окр2·р1', 'Окр2·р2', 'Вердикт', 'Ожид. из-за окружения'];
-    const rows = visible.map((r) => [
-      r.variable,
-      r.file,
-      r.env1R1,
-      r.env1R2,
-      r.env2R1,
-      r.env2R2,
-      VERDICT_LABEL[r.verdict],
-      r.expectedEnvDiff ? 'да' : '',
-    ]);
-    downloadCsv(
-      `sledilo_release-delta_${result.fp}_${result.branchR1}_${result.branchR2}.csv`.replace(/[^\w.-]+/g, '_'),
-      [header, ...rows].map((cols) => cols.map(csvField).join(',')).join('\r\n'),
-    );
-  };
-
   return (
     <div className="result">
       <div className="stats">
@@ -101,9 +83,6 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
           />
         </div>
         <span className="muted">показано: {shown.length} из {visible.length}</span>
-        <button className="export" disabled={visible.length === 0} onClick={exportCsv}>
-          Экспорт CSV
-        </button>
       </div>
 
       <table className="cmp">
@@ -198,16 +177,3 @@ function DeltaCell({ status, r1, r2, exp }: { status: string; r1: string | null;
   );
 }
 
-const csvField = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`;
-
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}

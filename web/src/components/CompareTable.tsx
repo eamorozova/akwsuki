@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CompareResult, FileSummary, OverrideEntry, RowStatus } from '../types';
 import { cellNodes, previewNodes } from './diffView';
 import { Combobox } from './Combobox';
@@ -14,21 +14,27 @@ const PAGE = 150; // сколько строк рендерим за раз (з�
 
 const depth = (p: string): number => (p.match(/\//g) ?? []).length;
 const isLong = (s: string | null): boolean => !!s && (s.includes('\n') || s.length > 80);
-const oneLine = (s: string | null): string => (s === null ? '— (нет)' : s.replace(/\n/g, ' ').slice(0, 90));
 
 interface Occ {
   file: string;
   valueA: string | null;
   valueB: string | null;
-  status: RowStatus;
+  status: RowStatus; // сравнение A↔B ДЛЯ ЭТОГО ФАЙЛА (на его уровне вложенности)
 }
 
 interface Group {
   variable: string;
-  rep: Occ;
+  rep: Occ; // корень / самый верхний слой
   occ: Occ[];
-  diverges: boolean;
+  status: RowStatus; // агрегат по всем файлам
   hasDiff: boolean;
+  nestedDiff: boolean; // есть отличия A↔B в нестандартных (не корневых) слоях
+}
+
+function aggregate(occ: Occ[]): RowStatus {
+  const set = new Set(occ.map((o) => o.status));
+  if (set.size === 1) return [...set][0]!;
+  return 'different';
 }
 
 export function CompareTable({ result }: { result: CompareResult }) {
@@ -54,9 +60,15 @@ export function CompareTable({ result }: { result: CompareResult }) {
     for (const [variable, occ] of map) {
       occ.sort((a, b) => depth(a.file) - depth(b.file) || a.file.localeCompare(b.file));
       const rep = occ[0]!;
-      const diverges = occ.some((o) => o.valueA !== rep.valueA || o.valueB !== rep.valueB);
-      const hasDiff = occ.some((o) => o.status !== 'equal');
-      out.push({ variable, rep, occ, diverges, hasDiff });
+      const status = aggregate(occ);
+      out.push({
+        variable,
+        rep,
+        occ,
+        status,
+        hasDiff: status !== 'equal',
+        nestedDiff: occ.some((o) => o.file !== rep.file && o.status !== 'equal'),
+      });
     }
     out.sort((a, b) => a.variable.localeCompare(b.variable));
     return out;
@@ -85,7 +97,6 @@ export function CompareTable({ result }: { result: CompareResult }) {
     [mergedRows, onlyDiff, query],
   );
 
-  // сбрасываем лимит при смене результата/фильтров
   useEffect(() => setLimit(PAGE), [result, onlyDiff, query, fileFilter]);
 
   const toggle = (key: string) =>
@@ -226,43 +237,45 @@ export function CompareTable({ result }: { result: CompareResult }) {
               const multi = g.occ.length > 1;
               const showExpander = long || multi;
               return (
-                <tr key={key} className={`st-${rep.status}`}>
-                  <td className="var">{g.variable}</td>
-                  <td className="file">
-                    {rep.file}
-                    {multi && <span className="muted"> +{g.occ.length - 1}</span>}
-                  </td>
-                  <td className="cell">
-                    <div className="val">
-                      {exp ? cellNodes(rep.status, 'A', rep.valueA, rep.valueB) : previewNodes(rep.status, 'A', rep.valueA, rep.valueB)}
-                    </div>
-                    {exp && multi && <OccList occ={g.occ} side="A" rep={rep} />}
-                    {showExpander && (
-                      <button className="more" onClick={() => toggle(key)}>
-                        {exp ? 'Свернуть' : multi ? `Показать ещё (${g.occ.length} файлов)` : 'Показать ещё'}
-                      </button>
-                    )}
-                  </td>
-                  <td className="cell">
-                    <div className="val">
-                      {exp ? cellNodes(rep.status, 'B', rep.valueA, rep.valueB) : previewNodes(rep.status, 'B', rep.valueA, rep.valueB)}
-                    </div>
-                    {exp && multi && <OccList occ={g.occ} side="B" rep={rep} />}
-                    {showExpander && (
-                      <button className="more" onClick={() => toggle(key)}>
-                        {exp ? 'Свернуть' : 'Показать ещё'}
-                      </button>
-                    )}
-                  </td>
-                  <td className="status">
-                    <span className={`badge st-${rep.status}`}>{STATUS_LABEL[rep.status]}</span>
-                    {g.diverges && (
-                      <span className="badge diverge" title="значения отличаются во вложенных слоях (custom/…)">
-                        слои ≠
-                      </span>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={key}>
+                  <tr className={`st-${g.status}`}>
+                    <td className="var">{g.variable}</td>
+                    <td className="file">
+                      {rep.file}
+                      {multi && <span className="muted"> +{g.occ.length - 1}</span>}
+                    </td>
+                    <td className="cell">
+                      <div className="val">
+                        {exp ? cellNodes(rep.status, 'A', rep.valueA, rep.valueB) : previewNodes(rep.status, 'A', rep.valueA, rep.valueB)}
+                      </div>
+                      {showExpander && (
+                        <button className="more" onClick={() => toggle(key)}>
+                          {exp ? 'Свернуть' : multi ? `Показать вхождения (${g.occ.length})` : 'Показать ещё'}
+                        </button>
+                      )}
+                    </td>
+                    <td className="cell">
+                      <div className="val">
+                        {exp ? cellNodes(rep.status, 'B', rep.valueA, rep.valueB) : previewNodes(rep.status, 'B', rep.valueA, rep.valueB)}
+                      </div>
+                    </td>
+                    <td className="status">
+                      <span className={`badge st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
+                      {g.nestedDiff && (
+                        <span className="badge diverge" title="есть отличия A↔B во вложенных слоях (custom/…)">
+                          слои ≠
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                  {exp && multi && (
+                    <tr className="detail">
+                      <td colSpan={5}>
+                        <OccTable occ={g.occ} sideA={`${result.sideA.branch}/${result.sideA.env}`} sideB={`${result.sideB.branch}/${result.sideB.env}`} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
 
@@ -289,26 +302,35 @@ export function CompareTable({ result }: { result: CompareResult }) {
   );
 }
 
-function OccList({ occ, side, rep }: { occ: Occ[]; side: 'A' | 'B'; rep: Occ }) {
-  const repVal = side === 'A' ? rep.valueA : rep.valueB;
+/** Табличный вид вхождений переменной по файлам: каждый файл сравнивается A↔B на своём уровне. */
+function OccTable({ occ, sideA, sideB }: { occ: Occ[]; sideA: string; sideB: string }) {
   return (
-    <div className="occ">
-      <div className="occ-title">вхождения по файлам:</div>
-      {occ.map((o) => {
-        const v = side === 'A' ? o.valueA : o.valueB;
-        const isRoot = o.file === rep.file;
-        const diff = v !== repVal;
-        return (
-          <div key={o.file} className={`occ-row${diff ? ' diff' : ''}${isRoot ? ' root' : ''}`}>
-            <span className="occ-file">
-              {isRoot ? '★ ' : ''}
-              {o.file}
-            </span>
-            <span className="occ-val">{oneLine(v)}</span>
-          </div>
-        );
-      })}
-    </div>
+    <table className="occ-table">
+      <thead>
+        <tr>
+          <th>Файл (уровень)</th>
+          <th>A · {sideA}</th>
+          <th>B · {sideB}</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody>
+        {occ.map((o) => (
+          <tr key={o.file} className={o.status !== 'equal' ? 'diff' : ''}>
+            <td className="occ-file">{o.file}</td>
+            <td className="occ-val">
+              <div className="val">{cellNodes(o.status, 'A', o.valueA, o.valueB)}</div>
+            </td>
+            <td className="occ-val">
+              <div className="val">{cellNodes(o.status, 'B', o.valueA, o.valueB)}</div>
+            </td>
+            <td>
+              <span className={`badge st-${o.status}`}>{STATUS_LABEL[o.status]}</span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -327,21 +349,32 @@ function OverrideTrail({ entries }: { entries?: OverrideEntry[] }) {
   );
 }
 
+const REASON_LABEL: Record<string, string> = {
+  eol: 'перевод строки (CRLF/LF)',
+  whitespace: 'пробелы / пустые строки / конец файла',
+  content: 'содержимое (см. таблицу переменных)',
+  missing: 'файл есть только с одной стороны',
+};
+
 function FileSummaryPanel({ files }: { files: FileSummary[] }) {
   const diffs = files.filter((f) => f.status !== 'equal');
   if (diffs.length === 0) return null;
   const shown = diffs.slice(0, 200);
   return (
     <details className="filepanel">
-      <summary>файлы с отличиями по байтам: {diffs.length} (вкл. пробелы/EOL вне значений)</summary>
+      <summary>
+        файлы, различающиеся побайтово: {diffs.length} — невидимое в сравнении переменных (пробелы,
+        переносы CRLF/LF, порядок ключей, комментарии)
+      </summary>
       <div className="filepanel-body">
         {shown.map((f) => (
           <div key={f.path} className="filerow">
             <span className={`badge st-${f.status}`}>{STATUS_LABEL[f.status]}</span>
             <span className="file">{f.path}</span>
-            {(f.eolA || f.eolB) && (
+            {f.reason && <span className="reason">{REASON_LABEL[f.reason]}</span>}
+            {f.reason === 'eol' && (
               <span className="muted">
-                EOL: A={f.eolA ?? '—'} · B={f.eolB ?? '—'}
+                A={f.eolA ?? '—'} · B={f.eolB ?? '—'}
               </span>
             )}
           </div>

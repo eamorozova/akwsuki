@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from './api';
 import type { CompareMode, CompareResult } from './types';
@@ -6,6 +6,25 @@ import { CompareTable } from './components/CompareTable';
 import { Combobox } from './components/Combobox';
 
 type Theme = 'light' | 'dark';
+
+interface Prefs {
+  fp: string;
+  branchA: string;
+  branchB: string;
+  envA: string;
+  envB: string;
+  mode: CompareMode;
+  scope: string;
+}
+
+const PREFS_KEY = 'sledilo-prefs';
+function loadPrefs(): Partial<Prefs> {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') as Partial<Prefs>;
+  } catch {
+    return {};
+  }
+}
 
 export function App() {
   const [theme, setTheme] = useState<Theme>(
@@ -16,19 +35,21 @@ export function App() {
     localStorage.setItem('sledilo-theme', theme);
   }, [theme]);
 
+  const p0 = useRef(loadPrefs()).current;
+
   const [fps, setFps] = useState<string[]>([]);
-  const [fp, setFp] = useState('');
-  const [branchA, setBranchA] = useState('');
-  const [branchB, setBranchB] = useState('');
+  const [fp, setFp] = useState(p0.fp ?? '');
+  const [branchA, setBranchA] = useState(p0.branchA ?? '');
+  const [branchB, setBranchB] = useState(p0.branchB ?? '');
   const [envsA, setEnvsA] = useState<string[]>([]);
   const [envsB, setEnvsB] = useState<string[]>([]);
-  const [envA, setEnvA] = useState('');
-  const [envB, setEnvB] = useState('');
+  const [envA, setEnvA] = useState(p0.envA ?? '');
+  const [envB, setEnvB] = useState(p0.envB ?? '');
   const [loadingEnvsA, setLoadingEnvsA] = useState(false);
   const [loadingEnvsB, setLoadingEnvsB] = useState(false);
-  const [mode, setMode] = useState<CompareMode>('by_file');
+  const [mode, setMode] = useState<CompareMode>(p0.mode ?? 'by_file');
   const [scopes, setScopes] = useState<string[]>([]);
-  const [scope, setScope] = useState('');
+  const [scope, setScope] = useState(p0.scope ?? '');
   const [loadingScopes, setLoadingScopes] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,42 +59,76 @@ export function App() {
     api.fps().then((x) => setFps(x.map((f) => f.name))).catch((e) => setError(String(e)));
   }, []);
 
-  // сброс при смене ФП
+  // сохраняем последние выборы
   useEffect(() => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ fp, branchA, branchB, envA, envB, mode, scope }));
+  }, [fp, branchA, branchB, envA, envB, mode, scope]);
+
+  // сброс зависимых выборов при РЕАЛЬНОЙ смене ФП (сравниваем с прошлым значением —
+  // устойчиво к двойному запуску эффектов в React StrictMode и к восстановлению из prefs)
+  const prevFp = useRef(fp);
+  useEffect(() => {
+    if (prevFp.current === fp) return;
+    prevFp.current = fp;
     setBranchA('');
     setBranchB('');
-    setEnvsA([]);
-    setEnvsB([]);
     setEnvA('');
     setEnvB('');
-    setScopes([]);
     setScope('');
     setResult(null);
   }, [fp]);
 
+  // окружения стороны A: грузим и сохраняем выбор, если он валиден в новой ветке
   useEffect(() => {
-    setEnvA('');
-    setEnvsA([]);
-    if (!fp || !branchA) return;
+    if (!fp || !branchA) {
+      setEnvsA([]);
+      setEnvA('');
+      return;
+    }
     setLoadingEnvsA(true);
-    api.envs(fp, branchA).then(setEnvsA).catch((e) => setError(String(e))).finally(() => setLoadingEnvsA(false));
+    api
+      .envs(fp, branchA)
+      .then((list) => {
+        setEnvsA(list);
+        setEnvA((cur) => (list.includes(cur) ? cur : ''));
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoadingEnvsA(false));
   }, [fp, branchA]);
 
   useEffect(() => {
-    setEnvB('');
-    setEnvsB([]);
-    if (!fp || !branchB) return;
+    if (!fp || !branchB) {
+      setEnvsB([]);
+      setEnvB('');
+      return;
+    }
     setLoadingEnvsB(true);
-    api.envs(fp, branchB).then(setEnvsB).catch((e) => setError(String(e))).finally(() => setLoadingEnvsB(false));
+    api
+      .envs(fp, branchB)
+      .then((list) => {
+        setEnvsB(list);
+        setEnvB((cur) => (list.includes(cur) ? cur : ''));
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoadingEnvsB(false));
   }, [fp, branchB]);
 
   // области для «слитого» режима — со стороны A
   useEffect(() => {
-    setScope('');
-    setScopes([]);
-    if (!fp || !branchA || !envA) return;
+    if (!fp || !branchA || !envA) {
+      setScopes([]);
+      setScope('');
+      return;
+    }
     setLoadingScopes(true);
-    api.scopes(fp, branchA, envA).then(setScopes).catch((e) => setError(String(e))).finally(() => setLoadingScopes(false));
+    api
+      .scopes(fp, branchA, envA)
+      .then((list) => {
+        setScopes(list);
+        setScope((cur) => (list.includes(cur) ? cur : ''));
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoadingScopes(false));
   }, [fp, branchA, envA]);
 
   const canCompare = Boolean(fp && branchA && envA && branchB && envB);
@@ -173,9 +228,9 @@ export function App() {
               <select value={scope} disabled={loadingScopes} onChange={(e) => setScope(e.target.value)}>
                 {loadingScopes && <option value="">загрузка…</option>}
                 {!loadingScopes &&
-                  scopes.map((s) => (
-                    <option key={s} value={s}>
-                      {s === '' ? '(корень / весь стенд)' : s}
+                  scopes.map((sc) => (
+                    <option key={sc} value={sc}>
+                      {sc === '' ? '(корень / весь стенд)' : sc}
                     </option>
                   ))}
               </select>
@@ -192,7 +247,7 @@ export function App() {
 
       {loading && (
         <div className="loading-block">
-          <span className="spinner" /> Загрузка сравнения… на больших стендах это может занять время
+          <span className="spinner" /> Загрузка сравнения…
         </div>
       )}
 

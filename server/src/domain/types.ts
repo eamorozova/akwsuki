@@ -48,6 +48,9 @@ export interface CompareStats {
   onlyB: number;
 }
 
+/** Причина побайтового различия файла. */
+export type DiffReason = 'eol' | 'whitespace' | 'content' | 'missing';
+
 /** Пофайловая сводка: сравнение сырого содержимого файла целиком (байт-в-байт). */
 export interface FileSummary {
   /** Относительный путь внутри окружения. */
@@ -55,6 +58,8 @@ export interface FileSummary {
   status: RowStatus;
   /** true, если файлы есть с обеих сторон и их содержимое идентично. */
   bytesEqual: boolean;
+  /** Чем именно различаются файлы (для понятного пояснения в UI). */
+  reason?: DiffReason;
   eolA?: EolKind;
   eolB?: EolKind;
 }

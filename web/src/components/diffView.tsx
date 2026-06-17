@@ -1,5 +1,8 @@
-import { diffChars } from 'diff';
+import { diffChars, diffLines } from 'diff';
 import type { ReactNode } from 'react';
+
+// Порог, выше которого посимвольный diff слишком дорог (O(n*m)) — переходим на построчный.
+const CHAR_DIFF_LIMIT = 4000;
 
 /**
  * Рендерит текст, делая невидимые символы видимыми и сохраняя переносы строк:
@@ -58,6 +61,22 @@ export function renderDiff(a: string, b: string, side: 'A' | 'B'): ReactNode[] {
   return out;
 }
 
+/** Построчный diff для больших значений — дёшево по DOM (без span на символ). */
+function renderLineDiff(a: string, b: string, side: 'A' | 'B'): ReactNode[] {
+  const out: ReactNode[] = [];
+  diffLines(a, b).forEach((p, idx) => {
+    if (side === 'A' && p.added) return;
+    if (side === 'B' && p.removed) return;
+    const cls = p.added ? 'add' : p.removed ? 'del' : 'eq';
+    out.push(
+      <span key={idx} className={`seg ${cls} rawline`}>
+        {p.value}
+      </span>,
+    );
+  });
+  return out;
+}
+
 /** Контент ячейки значения для одной стороны с учётом статуса строки (полный, для раскрытой строки). */
 export function cellNodes(
   status: string,
@@ -67,7 +86,13 @@ export function cellNodes(
 ): ReactNode {
   const value = side === 'A' ? valueA : valueB;
   if (value === null) return <span className="none">— (нет)</span>;
-  if (status === 'different') return renderDiff(valueA ?? '', valueB ?? '', side);
+  if (status === 'different') {
+    const a = valueA ?? '';
+    const b = valueB ?? '';
+    if (a.length > CHAR_DIFF_LIMIT || b.length > CHAR_DIFF_LIMIT) return renderLineDiff(a, b, side);
+    return renderDiff(a, b, side);
+  }
+  if (value.length > CHAR_DIFF_LIMIT) return <span className="seg eq rawline">{value}</span>;
   return <span className="seg eq">{visualize(value, side)}</span>;
 }
 

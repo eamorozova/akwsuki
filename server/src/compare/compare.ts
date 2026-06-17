@@ -111,19 +111,37 @@ export async function compareMerged(
   return { fp, sideA, sideB, mode: 'merged', scope, rows, stats: computeStats(rows) };
 }
 
+const unifyEol = (s: string): string => s.replace(/\r\n/g, '\n');
+const stripFormatting = (s: string): string =>
+  unifyEol(s)
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+$/, '')) // хвостовые пробелы/табы
+    .filter((l) => l !== '') // пустые строки
+    .join('\n');
+
+/** Классифицирует, чем именно различаются два файла. */
+function classifyDiff(ca: string, cb: string): 'eol' | 'whitespace' | 'content' {
+  if (unifyEol(ca) === unifyEol(cb)) return 'eol'; // различие только в CRLF/LF
+  if (stripFormatting(ca) === stripFormatting(cb)) return 'whitespace'; // хвостовые пробелы/пустые строки/конец файла
+  return 'content'; // значения/отступы/порядок — видно в таблице переменных
+}
+
 function fileSummaries(filesA: RepoFile[], filesB: RepoFile[]): FileSummary[] {
   const ma = new Map(filesA.map((f) => [f.path, f.content] as const));
   const mb = new Map(filesB.map((f) => [f.path, f.content] as const));
   return unionSorted(ma.keys(), mb.keys()).map((path) => {
     const ca = ma.get(path) ?? null;
     const cb = mb.get(path) ?? null;
+    const status = compareValues(ca, cb);
     const summary: FileSummary = {
       path,
-      status: compareValues(ca, cb),
+      status,
       bytesEqual: ca !== null && cb !== null && ca === cb,
     };
     if (ca !== null) summary.eolA = detectEol(ca);
     if (cb !== null) summary.eolB = detectEol(cb);
+    if (status === 'different' && ca !== null && cb !== null) summary.reason = classifyDiff(ca, cb);
+    else if (status === 'only_a' || status === 'only_b') summary.reason = 'missing';
     return summary;
   });
 }

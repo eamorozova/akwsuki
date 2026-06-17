@@ -461,6 +461,51 @@ button.loadmore {
   word-break: break-word;
 }
 
+.rawline {
+  white-space: pre-wrap;
+}
+
+tr.detail > td {
+  background: var(--panel-2);
+  padding: 8px 12px 12px;
+}
+table.occ-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+table.occ-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+}
+table.occ-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  word-break: break-word;
+}
+table.occ-table td.occ-val .val {
+  font-size: 12px;
+}
+table.occ-table tr.diff td {
+  background: color-mix(in srgb, var(--diff) 10%, transparent);
+}
+table.occ-table .occ-file {
+  color: var(--muted);
+  width: 300px;
+  word-break: break-all;
+  white-space: normal;
+}
+
 /* трейл переопределений (merged) */
 .trail {
   margin-top: 6px;
@@ -513,6 +558,10 @@ button.loadmore {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+.filerow .reason {
+  font-size: 12px;
+  color: var(--diff);
 }
 
 .badge {

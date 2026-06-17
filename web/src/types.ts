@@ -31,10 +31,13 @@ export interface RowMerged {
   status: RowStatus;
 }
 
+export type DiffReason = 'eol' | 'whitespace' | 'content' | 'missing';
+
 export interface FileSummary {
   path: string;
   status: RowStatus;
   bytesEqual: boolean;
+  reason?: DiffReason;
   eolA?: EolKind;
   eolB?: EolKind;
 }

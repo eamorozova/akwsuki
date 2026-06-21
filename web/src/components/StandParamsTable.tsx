@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CompareStandsResult, RowStatus } from '../types';
-import { cellNodes, previewNodes } from './diffView';
+import type { CompareStandsResult, RowStatus, StandParamRow } from '../types';
+import { previewNodes } from './diffView';
+import { DiffModal, type DiffModalData } from './DiffModal';
 
 const PAGE = 150;
 const STATUS_LABEL: Record<RowStatus, string> = {
@@ -14,8 +15,8 @@ const isLong = (s: string | null): boolean => !!s && (s.includes('\n') || s.leng
 export function StandParamsTable({ result }: { result: CompareStandsResult }) {
   const [onlyDiff, setOnlyDiff] = useState(true);
   const [query, setQuery] = useState('');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(PAGE);
+  const [modal, setModal] = useState<DiffModalData | null>(null);
 
   const visible = useMemo(
     () =>
@@ -29,12 +30,19 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
 
   useEffect(() => setLimit(PAGE), [result, onlyDiff, query]);
 
-  const toggle = (key: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
+  const open = (r: StandParamRow) =>
+    setModal({
+      title: r.param,
+      statusLabel: STATUS_LABEL[r.status],
+      statusCls: `st-${r.status}`,
+      pairs: [
+        {
+          aLabel: `${result.branch1} / ${result.stand1}`,
+          bLabel: `${result.branch2} / ${result.stand2}`,
+          valueA: r.valueA,
+          valueB: r.valueB,
+        },
+      ],
     });
 
   const s = result.stats;
@@ -80,25 +88,20 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
         </thead>
         <tbody>
           {shown.map((r) => {
-            const exp = expanded.has(r.param);
             const long = isLong(r.valueA) || isLong(r.valueB);
             return (
               <tr key={r.param} className={`st-${r.status}`}>
                 <td className="var">{r.param}</td>
                 <td className="cell">
-                  <div className="val">
-                    {exp ? cellNodes(r.status, 'A', r.valueA, r.valueB) : previewNodes(r.status, 'A', r.valueA, r.valueB)}
-                  </div>
+                  <div className="val">{previewNodes(r.status, 'A', r.valueA, r.valueB)}</div>
                   {long && (
-                    <button className="more" onClick={() => toggle(r.param)}>
-                      {exp ? 'Свернуть' : 'Показать ещё'}
+                    <button className="more" onClick={() => open(r)}>
+                      Развернуть
                     </button>
                   )}
                 </td>
                 <td className="cell">
-                  <div className="val">
-                    {exp ? cellNodes(r.status, 'B', r.valueA, r.valueB) : previewNodes(r.status, 'B', r.valueA, r.valueB)}
-                  </div>
+                  <div className="val">{previewNodes(r.status, 'B', r.valueA, r.valueB)}</div>
                 </td>
                 <td className="status">
                   <span className={`badge st-${r.status}`}>{STATUS_LABEL[r.status]}</span>
@@ -126,6 +129,8 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
           )}
         </tbody>
       </table>
+
+      <DiffModal data={modal} onClose={() => setModal(null)} />
     </div>
   );
 }

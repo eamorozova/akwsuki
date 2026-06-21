@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CompareReleaseDeltaResult, ReleaseVerdict, RowReleaseDelta } from '../types';
-import { cellNodes, previewNodes } from './diffView';
+import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
+import { DiffModal, type DiffModalData } from './DiffModal';
 
 const PAGE = 150;
 
@@ -22,8 +23,8 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
   const [hideExpected, setHideExpected] = useState(false);
   const [query, setQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(PAGE);
+  const [modal, setModal] = useState<DiffModalData | null>(null);
 
   const allFiles = useMemo(() => [...new Set(result.rows.map((r) => r.file))].sort(), [result]);
 
@@ -41,12 +42,28 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
 
   useEffect(() => setLimit(PAGE), [result, showConsistent, hideExpected, query, fileFilter]);
 
-  const toggle = (key: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
+  const open = (r: RowReleaseDelta) =>
+    setModal({
+      title: r.variable,
+      subtitle: r.file,
+      statusLabel: VERDICT_LABEL[r.verdict],
+      statusCls: `vd-${r.verdict}`,
+      pairs: [
+        {
+          caption: `Окр.1: ${result.env1}`,
+          aLabel: `р1 · ${result.branchR1}`,
+          bLabel: `р2 · ${result.branchR2}`,
+          valueA: r.env1R1,
+          valueB: r.env1R2,
+        },
+        {
+          caption: `Окр.2: ${result.env2}`,
+          aLabel: `р1 · ${result.branchR1}`,
+          bLabel: `р2 · ${result.branchR2}`,
+          valueA: r.env2R1,
+          valueB: r.env2R2,
+        },
+      ],
     });
 
   const s = result.stats;
@@ -109,22 +126,20 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
         <tbody>
           {shown.map((r) => {
             const key = `${r.variable}|||${r.file}`;
-            const exp = expanded.has(key);
-            const long = rowLong(r);
             return (
               <tr key={key} className={`vd-row-${r.verdict}`}>
                 <td className="var">{r.variable}</td>
                 <td className="file">{r.file}</td>
                 <td className="cell">
-                  <DeltaCell status={r.statusEnv1} r1={r.env1R1} r2={r.env1R2} exp={exp} />
-                  {long && (
-                    <button className="more" onClick={() => toggle(key)}>
-                      {exp ? 'Свернуть' : 'Показать ещё'}
+                  <DeltaCell status={r.statusEnv1} r1={r.env1R1} r2={r.env1R2} />
+                  {rowLong(r) && (
+                    <button className="more" onClick={() => open(r)}>
+                      Развернуть
                     </button>
                   )}
                 </td>
                 <td className="cell">
-                  <DeltaCell status={r.statusEnv2} r1={r.env2R1} r2={r.env2R2} exp={exp} />
+                  <DeltaCell status={r.statusEnv2} r1={r.env2R1} r2={r.env2R2} />
                 </td>
                 <td className="status">
                   <span className={`badge vd-${r.verdict}`}>{VERDICT_LABEL[r.verdict]}</span>
@@ -157,23 +172,24 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
           )}
         </tbody>
       </table>
+
+      <DiffModal data={modal} onClose={() => setModal(null)} />
     </div>
   );
 }
 
-/** Ячейка-дельта одного стенда: р1 (что было) и р2 (что стало) с подсветкой изменения. */
-function DeltaCell({ status, r1, r2, exp }: { status: string; r1: string | null; r2: string | null; exp: boolean }) {
+/** Ячейка-дельта одного стенда: р1 (что было) и р2 (что стало), краткий предпросмотр. */
+function DeltaCell({ status, r1, r2 }: { status: string; r1: string | null; r2: string | null }) {
   return (
     <div className="delta">
       <div className="dline">
         <span className="rtag">р1</span>
-        <span className="val">{exp ? cellNodes(status, 'A', r1, r2) : previewNodes(status, 'A', r1, r2)}</span>
+        <span className="val">{previewNodes(status, 'A', r1, r2)}</span>
       </div>
       <div className="dline">
         <span className="rtag">р2</span>
-        <span className="val">{exp ? cellNodes(status, 'B', r1, r2) : previewNodes(status, 'B', r1, r2)}</span>
+        <span className="val">{previewNodes(status, 'B', r1, r2)}</span>
       </div>
     </div>
   );
 }
-

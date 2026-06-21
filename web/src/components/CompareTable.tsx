@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CompareResult, FileSummary, OverrideEntry, RowStatus } from '../types';
-import { cellNodes, previewNodes } from './diffView';
+import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
+import { DiffModal, type DiffModalData } from './DiffModal';
 
 const STATUS_LABEL: Record<RowStatus, string> = {
   equal: '=',
@@ -44,6 +45,10 @@ export function CompareTable({ result }: { result: CompareResult }) {
   const [fileFilter, setFileFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(PAGE);
+  const [modal, setModal] = useState<DiffModalData | null>(null);
+
+  const sideA = `${result.sideA.branch} / ${result.sideA.env}`;
+  const sideB = `${result.sideB.branch} / ${result.sideB.env}`;
 
   const byFileRows = result.mode === 'by_file' ? result.rows : [];
   const mergedRows = result.mode === 'merged' ? result.rows : [];
@@ -107,6 +112,15 @@ export function CompareTable({ result }: { result: CompareResult }) {
       return next;
     });
 
+  const openValue = (variable: string, file: string, status: RowStatus, valueA: string | null, valueB: string | null) =>
+    setModal({
+      title: variable,
+      subtitle: file,
+      statusLabel: STATUS_LABEL[status],
+      statusCls: `st-${status}`,
+      pairs: [{ aLabel: sideA, bLabel: sideB, valueA, valueB }],
+    });
+
   const s = result.stats;
   const total = merged ? visibleMerged.length : visibleGroups.length;
   const shownMerged = visibleMerged.slice(0, limit);
@@ -165,12 +179,8 @@ export function CompareTable({ result }: { result: CompareResult }) {
           <tr>
             <th>Переменная</th>
             <th>{merged ? 'Файл (юнит)' : 'Файл'}</th>
-            <th>
-              A · {result.sideA.branch} / {result.sideA.env}
-            </th>
-            <th>
-              B · {result.sideB.branch} / {result.sideB.env}
-            </th>
+            <th>A · {sideA}</th>
+            <th>B · {sideB}</th>
             <th>Статус</th>
           </tr>
         </thead>
@@ -180,33 +190,32 @@ export function CompareTable({ result }: { result: CompareResult }) {
               const key = `${r.variable}|||${r.file}`;
               const exp = expanded.has(key);
               const long = isLong(r.valueA) || isLong(r.valueB);
+              const hasTrail = (r.overridesA?.length ?? 0) > 1 || (r.overridesB?.length ?? 0) > 1;
               return (
                 <tr key={key} className={`st-${r.status}`}>
                   <td className="var">{r.variable}</td>
                   <td className="file">{r.file}</td>
                   <td className="cell">
-                    <div className="val">
-                      {exp ? cellNodes(r.status, 'A', r.valueA, r.valueB) : previewNodes(r.status, 'A', r.valueA, r.valueB)}
-                    </div>
+                    <div className="val">{previewNodes(r.status, 'A', r.valueA, r.valueB)}</div>
                     {r.sourceA && <div className="src">← {r.sourceA}</div>}
                     {exp && <OverrideTrail entries={r.overridesA} />}
-                    {long && (
-                      <button className="more" onClick={() => toggle(key)}>
-                        {exp ? 'Свернуть' : 'Показать ещё'}
-                      </button>
-                    )}
+                    <div className="cell-actions">
+                      {long && (
+                        <button className="more" onClick={() => openValue(r.variable, r.file, r.status, r.valueA, r.valueB)}>
+                          Развернуть
+                        </button>
+                      )}
+                      {hasTrail && (
+                        <button className="more" onClick={() => toggle(key)}>
+                          {exp ? 'Скрыть слои' : `слои (${r.overridesA?.length ?? 0})`}
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="cell">
-                    <div className="val">
-                      {exp ? cellNodes(r.status, 'B', r.valueA, r.valueB) : previewNodes(r.status, 'B', r.valueA, r.valueB)}
-                    </div>
+                    <div className="val">{previewNodes(r.status, 'B', r.valueA, r.valueB)}</div>
                     {r.sourceB && <div className="src">← {r.sourceB}</div>}
                     {exp && <OverrideTrail entries={r.overridesB} />}
-                    {long && (
-                      <button className="more" onClick={() => toggle(key)}>
-                        {exp ? 'Свернуть' : 'Показать ещё'}
-                      </button>
-                    )}
                   </td>
                   <td className="status">
                     <span className={`badge st-${r.status}`}>{STATUS_LABEL[r.status]}</span>
@@ -222,7 +231,6 @@ export function CompareTable({ result }: { result: CompareResult }) {
               const rep = g.rep;
               const long = isLong(rep.valueA) || isLong(rep.valueB);
               const multi = g.occ.length > 1;
-              const showExpander = long || multi;
               return (
                 <Fragment key={key}>
                   <tr className={`st-${g.status}`}>
@@ -232,19 +240,22 @@ export function CompareTable({ result }: { result: CompareResult }) {
                       {multi && <span className="muted"> +{g.occ.length - 1}</span>}
                     </td>
                     <td className="cell">
-                      <div className="val">
-                        {exp ? cellNodes(rep.status, 'A', rep.valueA, rep.valueB) : previewNodes(rep.status, 'A', rep.valueA, rep.valueB)}
+                      <div className="val">{previewNodes(rep.status, 'A', rep.valueA, rep.valueB)}</div>
+                      <div className="cell-actions">
+                        {long && (
+                          <button className="more" onClick={() => openValue(g.variable, rep.file, rep.status, rep.valueA, rep.valueB)}>
+                            Развернуть
+                          </button>
+                        )}
+                        {multi && (
+                          <button className="more" onClick={() => toggle(key)}>
+                            {exp ? 'Скрыть вхождения' : `вхождения (${g.occ.length})`}
+                          </button>
+                        )}
                       </div>
-                      {showExpander && (
-                        <button className="more" onClick={() => toggle(key)}>
-                          {exp ? 'Свернуть' : multi ? `Показать вхождения (${g.occ.length})` : 'Показать ещё'}
-                        </button>
-                      )}
                     </td>
                     <td className="cell">
-                      <div className="val">
-                        {exp ? cellNodes(rep.status, 'B', rep.valueA, rep.valueB) : previewNodes(rep.status, 'B', rep.valueA, rep.valueB)}
-                      </div>
+                      <div className="val">{previewNodes(rep.status, 'B', rep.valueA, rep.valueB)}</div>
                     </td>
                     <td className="status">
                       <span className={`badge st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
@@ -258,12 +269,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
                   {exp && multi && (
                     <tr className="detail">
                       <td colSpan={5}>
-                        <OccTable
-                          variable={g.variable}
-                          occ={g.occ}
-                          sideA={`${result.sideA.branch}/${result.sideA.env}`}
-                          sideB={`${result.sideB.branch}/${result.sideB.env}`}
-                        />
+                        <OccTable variable={g.variable} occ={g.occ} sideA={sideA} sideB={sideB} onOpen={openValue} />
                       </td>
                     </tr>
                   )}
@@ -290,12 +296,26 @@ export function CompareTable({ result }: { result: CompareResult }) {
           )}
         </tbody>
       </table>
+
+      <DiffModal data={modal} onClose={() => setModal(null)} />
     </div>
   );
 }
 
 /** Табличный вид вхождений переменной по файлам: каждый файл сравнивается A↔B на своём уровне. */
-function OccTable({ variable, occ, sideA, sideB }: { variable: string; occ: Occ[]; sideA: string; sideB: string }) {
+function OccTable({
+  variable,
+  occ,
+  sideA,
+  sideB,
+  onOpen,
+}: {
+  variable: string;
+  occ: Occ[];
+  sideA: string;
+  sideB: string;
+  onOpen: (variable: string, file: string, status: RowStatus, valueA: string | null, valueB: string | null) => void;
+}) {
   return (
     <div className="occ-wrap">
       <div className="occ-caption">
@@ -311,20 +331,28 @@ function OccTable({ variable, occ, sideA, sideB }: { variable: string; occ: Occ[
           </tr>
         </thead>
         <tbody>
-          {occ.map((o) => (
-            <tr key={o.file} className={o.status !== 'equal' ? 'diff' : ''}>
-              <td className="occ-file">{o.file}</td>
-              <td className="occ-val">
-                <div className="val">{previewNodes(o.status, 'A', o.valueA, o.valueB)}</div>
-              </td>
-              <td className="occ-val">
-                <div className="val">{previewNodes(o.status, 'B', o.valueA, o.valueB)}</div>
-              </td>
-              <td>
-                <span className={`badge st-${o.status}`}>{STATUS_LABEL[o.status]}</span>
-              </td>
-            </tr>
-          ))}
+          {occ.map((o) => {
+            const long = isLong(o.valueA) || isLong(o.valueB);
+            return (
+              <tr key={o.file} className={o.status !== 'equal' ? 'diff' : ''}>
+                <td className="occ-file">{o.file}</td>
+                <td className="occ-val">
+                  <div className="val">{previewNodes(o.status, 'A', o.valueA, o.valueB)}</div>
+                  {long && (
+                    <button className="more" onClick={() => onOpen(variable, o.file, o.status, o.valueA, o.valueB)}>
+                      Развернуть
+                    </button>
+                  )}
+                </td>
+                <td className="occ-val">
+                  <div className="val">{previewNodes(o.status, 'B', o.valueA, o.valueB)}</div>
+                </td>
+                <td>
+                  <span className={`badge st-${o.status}`}>{STATUS_LABEL[o.status]}</span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -360,9 +388,7 @@ function FileSummaryPanel({ files }: { files: FileSummary[] }) {
   const shown = diffs.slice(0, 200);
   return (
     <details className="filepanel">
-      <summary>
-        файлы, различающиеся только форматированием: {diffs.length}
-      </summary>
+      <summary>файлы, различающиеся только форматированием: {diffs.length}</summary>
       <div className="filepanel-body">
         {shown.map((f) => (
           <div key={f.path} className="filerow">
@@ -381,4 +407,3 @@ function FileSummaryPanel({ files }: { files: FileSummary[] }) {
     </details>
   );
 }
-

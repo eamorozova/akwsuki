@@ -31,6 +31,11 @@ beforeAll(async () => {
   await write('SDS__shared/master/vars/get_stand_params.groovy', standsFile('Cqwe'));
   await write('SDS__shared/release/vars/get_stand_params.groovy', standsFile('Cqwe2'));
 
+  // RSS gitops: stands/<env>/<stand>/<service>/values.yaml
+  const svcValues = (host: string) => `base-service:\n  envData:\n    TARGET_HOST: ${host}\n    TARGET_PORT: 5433\n`;
+  await write('RSS__gitops/master/stands/dev/dev-14/sdsrs-analytics-etl-service/values.yaml', svcValues('host-a'));
+  await write('RSS__gitops/release/stands/dev/dev-14/sdsrs-analytics-etl-service/values.yaml', svcValues('host-b'));
+
   const deps: ServerDeps = {
     async listFps() {
       return ['SDS'];
@@ -42,6 +47,12 @@ beforeAll(async () => {
       return new LocalFsProvider(path.join(root, `${fp}__shared`));
     },
     standParamsPath: 'vars/get_stand_params.groovy',
+    async listGitopsFps() {
+      return ['RSS'];
+    },
+    getGitopsProvider(fp) {
+      return new LocalFsProvider(path.join(root, `${fp}__gitops`));
+    },
   };
   app = await buildServer(deps);
 });
@@ -135,6 +146,33 @@ describe('API', () => {
   it('POST /api/compare-stands валидирует тело → 400', async () => {
     const r = await app.inject({ method: 'POST', url: '/api/compare-stands', payload: { fp: 'SDS' } });
     expect(r.statusCode).toBe(400);
+  });
+
+  it('GET /api/gitops/fps и листинг окружений/стендов', async () => {
+    const fps = await app.inject({ method: 'GET', url: '/api/gitops/fps' });
+    expect(fps.json()).toEqual([{ name: 'RSS' }]);
+    const envs = await app.inject({ method: 'GET', url: '/api/gitops/RSS/envs?branch=master' });
+    expect(envs.json()).toEqual(['dev']);
+    const stands = await app.inject({ method: 'GET', url: '/api/gitops/RSS/stands?branch=master&env=dev' });
+    expect(stands.json()).toEqual(['dev-14']);
+  });
+
+  it('POST /api/compare-rss сравнивает листья сервисных values.yaml', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/compare-rss',
+      payload: {
+        fp: 'RSS',
+        sideA: { branch: 'master', env: 'dev', stand: 'dev-14' },
+        sideB: { branch: 'release', env: 'dev', stand: 'dev-14' },
+      },
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { rows: { param: string; source: string; status: string }[] };
+    const th = body.rows.find((x) => x.param === 'envData.TARGET_HOST');
+    expect(th?.source).toBe('sdsrs-analytics-etl-service');
+    expect(th?.status).toBe('different');
+    expect(body.rows.find((x) => x.param === 'envData.TARGET_PORT')?.status).toBe('equal');
   });
 
   it('POST /api/compare mode=merged применяет цепочку переопределения', async () => {

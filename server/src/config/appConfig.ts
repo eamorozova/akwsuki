@@ -21,6 +21,10 @@ export interface ServerDeps {
   getSharedProvider(fp: string): FileProvider;
   /** Путь к файлу параметров стендов внутри shared_libs репо. */
   standParamsPath: string;
+  /** ФП с gitops-репозиторием (RSS). */
+  listGitopsFps(): Promise<string[]>;
+  /** Провайдер gitops-репозитория (stands/<env>/<stand>/<service>/values.yaml). */
+  getGitopsProvider(fp: string): FileProvider;
 }
 
 const DEFAULT_STAND_PARAMS_PATH = process.env.STAND_PARAMS_PATH ?? 'vars/get_stand_params.groovy';
@@ -41,15 +45,7 @@ export function buildLocalDeps(): ServerDeps {
 
   return {
     async listFps() {
-      try {
-        const entries = await fs.readdir(demoDir, { withFileTypes: true });
-        return entries
-          .filter((e) => e.isDirectory() && !e.name.endsWith('__shared'))
-          .map((e) => e.name)
-          .sort();
-      } catch {
-        return [];
-      }
+      return listDemoDirs(demoDir, (n) => !n.endsWith('__shared') && !n.endsWith('__gitops'));
     },
     getProvider(fp: string) {
       return new LocalFsProvider(path.join(demoDir, fp));
@@ -58,14 +54,32 @@ export function buildLocalDeps(): ServerDeps {
       return new LocalFsProvider(path.join(demoDir, `${fp}__shared`));
     },
     standParamsPath: DEFAULT_STAND_PARAMS_PATH,
+    async listGitopsFps() {
+      return (await listDemoDirs(demoDir, (n) => n.endsWith('__gitops'))).map((n) => n.replace(/__gitops$/, ''));
+    },
+    getGitopsProvider(fp: string) {
+      return new LocalFsProvider(path.join(demoDir, `${fp}__gitops`));
+    },
   };
+}
+
+async function listDemoDirs(demoDir: string, keep: (name: string) => boolean): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(demoDir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isDirectory() && keep(e.name))
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 interface FpConfig {
   bitbucketUrl: string;
   project: string;
   standParamsPath?: string;
-  fps: { name: string; repo: string; sharedLibsRepo?: string }[];
+  fps: { name: string; repo?: string; sharedLibsRepo?: string; gitopsRepo?: string }[];
 }
 
 function loadFpConfig(): FpConfig {
@@ -87,12 +101,13 @@ export function buildBitbucketDeps(): ServerDeps {
   const rejectUnauthorized = process.env.BITBUCKET_TLS_REJECT === '1';
   const repos = new Map(cfg.fps.map((f) => [f.name, f.repo] as const));
   const sharedRepos = new Map(cfg.fps.map((f) => [f.name, f.sharedLibsRepo] as const));
+  const gitopsRepos = new Map(cfg.fps.map((f) => [f.name, f.gitopsRepo] as const));
   const mkProvider = (repo: string) =>
     new BitbucketProvider({ baseUrl: cfg.bitbucketUrl, project: cfg.project, repo, token, rejectUnauthorized });
 
   return {
     async listFps() {
-      return cfg.fps.map((f) => f.name);
+      return cfg.fps.filter((f) => f.repo).map((f) => f.name);
     },
     getProvider(fp: string) {
       const repo = repos.get(fp);
@@ -105,5 +120,13 @@ export function buildBitbucketDeps(): ServerDeps {
       return mkProvider(repo);
     },
     standParamsPath: cfg.standParamsPath ?? DEFAULT_STAND_PARAMS_PATH,
+    async listGitopsFps() {
+      return cfg.fps.filter((f) => f.gitopsRepo).map((f) => f.name);
+    },
+    getGitopsProvider(fp: string) {
+      const repo = gitopsRepos.get(fp);
+      if (!repo) throw new Error(`no gitopsRepo configured for fp: ${fp}`);
+      return mkProvider(repo);
+    },
   };
 }

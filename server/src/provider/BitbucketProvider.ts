@@ -104,6 +104,17 @@ export class BitbucketProvider implements FileProvider {
     }
   }
 
+  async listSubdirs(branch: string, dirPath: string): Promise<string[]> {
+    // имена непосредственных подпапок = первый сегмент путей файлов под dirPath
+    const files = await this.listFiles(dirPath, branch);
+    const dirs = new Set<string>();
+    for (const f of files) {
+      const i = f.indexOf('/');
+      if (i > 0) dirs.add(f.slice(0, i));
+    }
+    return [...dirs].sort();
+  }
+
   /** Список путей файлов под каталогом (рекурсивно), относительно него. */
   private async listFiles(dir: string, branch: string): Promise<string[]> {
     const out: string[] = [];

@@ -30,4 +30,6 @@ export interface FileProvider {
   readEnvYamlFiles(branch: string, env: string): Promise<RepoFile[]>;
   /** Содержимое одного файла по пути на ветке; null, если файла нет. */
   readFile(branch: string, filePath: string): Promise<string | null>;
+  /** Имена подпапок по заданному пути на ветке (для навигации stands/<env>/<stand>). */
+  listSubdirs(branch: string, dirPath: string): Promise<string[]>;
 }

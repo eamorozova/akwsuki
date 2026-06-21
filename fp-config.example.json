@@ -5,6 +5,7 @@
   "fps": [
     { "name": "SDS", "repo": "repo_slug_for_sds", "sharedLibsRepo": "shared_libs_slug_for_sds" },
     { "name": "MMS", "repo": "repo_slug_for_mms", "sharedLibsRepo": "shared_libs_slug_for_mms" },
-    { "name": "KSS", "repo": "repo_slug_for_kss", "sharedLibsRepo": "shared_libs_slug_for_kss" }
+    { "name": "KSS", "repo": "repo_slug_for_kss", "sharedLibsRepo": "shared_libs_slug_for_kss" },
+    { "name": "RSS", "gitopsRepo": "gitops_slug_for_rss" }
   ]
 }

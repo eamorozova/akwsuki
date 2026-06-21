@@ -5,7 +5,8 @@ import type { ServerDeps } from '../config/appConfig';
 import { compareByFile, compareMerged } from '../compare/compare';
 import { compareReleaseDelta } from '../compare/releaseDelta';
 import { compareStands, listStands } from '../standparams/compareStands';
-import type { CompareSide } from '../domain/types';
+import { compareRss, listRssEnvs, listRssStands } from '../rss/compareRss';
+import type { CompareSide, RssSide } from '../domain/types';
 
 interface CompareBody {
   fp?: string;
@@ -31,6 +32,15 @@ interface CompareStandsBody {
   stand2?: string;
 }
 
+interface CompareRssBody {
+  fp?: string;
+  sideA?: Partial<RssSide>;
+  sideB?: Partial<RssSide>;
+}
+
+const validSide = (s: Partial<RssSide> | undefined): s is RssSide =>
+  !!s && typeof s.branch === 'string' && !!s.branch && typeof s.env === 'string' && !!s.env && typeof s.stand === 'string' && !!s.stand;
+
 const dirOf = (p: string): string => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
 
 export interface ServerOptions {
@@ -53,7 +63,12 @@ export async function buildServer(deps: ServerDeps, opts: ServerOptions = {}): P
     '/api/fp/:fp/branches',
     async (req) => {
       const { q, limit, repo } = req.query;
-      const provider = repo === 'shared' ? deps.getSharedProvider(req.params.fp) : deps.getProvider(req.params.fp);
+      const provider =
+        repo === 'shared'
+          ? deps.getSharedProvider(req.params.fp)
+          : repo === 'gitops'
+            ? deps.getGitopsProvider(req.params.fp)
+            : deps.getProvider(req.params.fp);
       return provider.listBranches({ filterText: q || undefined, limit: limit ? Number(limit) : undefined });
     },
   );
@@ -185,6 +200,56 @@ export async function buildServer(deps: ServerDeps, opts: ServerOptions = {}): P
       return reply.code(404).send({ error: 'not found' });
     });
   }
+
+  // ---- RSS: stands/<env>/<stand>/<service>/values.yaml ----
+  app.get('/api/gitops/fps', async () => {
+    const fps = await deps.listGitopsFps();
+    return fps.map((name) => ({ name }));
+  });
+
+  app.get<{ Params: { fp: string }; Querystring: { branch?: string } }>(
+    '/api/gitops/:fp/envs',
+    async (req, reply) => {
+      const branch = req.query.branch;
+      if (!branch) {
+        reply.code(400);
+        return { error: 'query param "branch" is required' };
+      }
+      return listRssEnvs(deps.getGitopsProvider(req.params.fp), branch);
+    },
+  );
+
+  app.get<{ Params: { fp: string }; Querystring: { branch?: string; env?: string } }>(
+    '/api/gitops/:fp/stands',
+    async (req, reply) => {
+      const { branch, env } = req.query;
+      if (!branch || !env) {
+        reply.code(400);
+        return { error: 'query params "branch" and "env" are required' };
+      }
+      return listRssStands(deps.getGitopsProvider(req.params.fp), branch, env);
+    },
+  );
+
+  app.post<{ Body: CompareRssBody }>('/api/compare-rss', async (req, reply) => {
+    const { fp, sideA, sideB } = req.body ?? {};
+    if (typeof fp !== 'string' || !fp || !validSide(sideA) || !validSide(sideB)) {
+      reply.code(400);
+      return { error: 'fp, sideA{branch,env,stand}, sideB{branch,env,stand} are required' };
+    }
+    const t0 = Date.now();
+    const label = `[rss] ${fp} ${sideA.branch}:${sideA.env}/${sideA.stand} vs ${sideB.branch}:${sideB.env}/${sideB.stand}`;
+    console.log(`${label} — старт`);
+    try {
+      const res = await compareRss(deps.getGitopsProvider(fp), fp, sideA, sideB);
+      console.log(`${label} — готово: строк=${res.rows.length} за ${Date.now() - t0}ms`);
+      return res;
+    } catch (e) {
+      console.error(`${label} — ошибка за ${Date.now() - t0}ms: ${(e as Error).message}`);
+      reply.code(502);
+      return { error: (e as Error).message };
+    }
+  });
 
   return app;
 }

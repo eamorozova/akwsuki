@@ -181,3 +181,27 @@ export interface CompareStandsResult {
   rows: StandParamRow[];
   stats: CompareStats;
 }
+
+/** RSS (gitops): сторона = ветка(релиз) + окружение + стенд. */
+export interface RssSide {
+  branch: string;
+  env: string;
+  stand: string;
+}
+
+/** Строка сравнения RSS: лист values.yaml сервиса. */
+export interface RssRow {
+  param: string; // путь листа без префикса base-service (напр. envData.TARGET_HOST)
+  source: string; // сервис (папка), где параметр найден
+  valueA: string | null;
+  valueB: string | null;
+  status: RowStatus;
+}
+
+export interface CompareRssResult {
+  fp: string;
+  sideA: RssSide;
+  sideB: RssSide;
+  rows: RssRow[];
+  stats: CompareStats;
+}

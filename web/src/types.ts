@@ -132,3 +132,25 @@ export interface CompareStandsResult {
   rows: StandParamRow[];
   stats: CompareStats;
 }
+
+export interface RssSide {
+  branch: string;
+  env: string;
+  stand: string;
+}
+
+export interface RssRow {
+  param: string;
+  source: string;
+  valueA: string | null;
+  valueB: string | null;
+  status: RowStatus;
+}
+
+export interface CompareRssResult {
+  fp: string;
+  sideA: RssSide;
+  sideB: RssSide;
+  rows: RssRow[];
+  stats: CompareStats;
+}

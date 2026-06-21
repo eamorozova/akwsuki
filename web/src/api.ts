@@ -2,8 +2,10 @@ import type {
   CompareMode,
   CompareReleaseDeltaResult,
   CompareResult,
+  CompareRssResult,
   CompareSide,
   CompareStandsResult,
+  RssSide,
   StandInfo,
 } from './types';
 
@@ -23,7 +25,7 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   fps: () => j<{ name: string }[]>('/api/fp'),
-  branches: (fp: string, q?: string, repo?: 'shared') => {
+  branches: (fp: string, q?: string, repo?: 'shared' | 'gitops') => {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (repo) params.set('repo', repo);
@@ -55,5 +57,18 @@ export const api = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ fp, branch1, stand1, branch2, stand2 }),
+    }),
+  gitopsFps: () => j<{ name: string }[]>('/api/gitops/fps'),
+  gitopsEnvs: (fp: string, branch: string) =>
+    j<string[]>(`/api/gitops/${encodeURIComponent(fp)}/envs?branch=${encodeURIComponent(branch)}`),
+  gitopsStands: (fp: string, branch: string, env: string) =>
+    j<string[]>(
+      `/api/gitops/${encodeURIComponent(fp)}/stands?branch=${encodeURIComponent(branch)}&env=${encodeURIComponent(env)}`,
+    ),
+  compareRss: (fp: string, sideA: RssSide, sideB: RssSide) =>
+    j<CompareRssResult>('/api/compare-rss', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fp, sideA, sideB }),
     }),
 };

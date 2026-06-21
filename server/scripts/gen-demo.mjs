@@ -95,4 +95,38 @@ for (const [fp, branches] of Object.entries(SPEC)) {
   }
 }
 
+// RSS (gitops): stands/<env>/<stand>/<service>/values.yaml — для страницы «RSS (gitops)»
+function rssValues(service, branch) {
+  const r2 = branch === 'release';
+  return `base-service:
+  registryRepo: docker-dev.registry-ci.delta.sbrf.ru
+  envData:
+    TARGET_HOST: tvldd-sbdsc00${r2 ? '99' : '26'}.delta.sbrf.ru
+    TARGET_PORT: 5433
+    SOURCES_BATCH_SIZE: ${r2 ? 3000 : 2000}
+    SOURCES:
+      SDSDE:
+        HOST: 10.141.127.141
+        PORT: 5433
+  resources:
+    limits:
+      cpu: 500m
+      memory: ${r2 ? '900Mi' : '700Mi'}
+  service: ${service}
+`;
+}
+const RSS_SERVICES = ['sdsrs-analytics-etl-service', 'sdsrs-frontend-service'];
+const RSS_STANDS = { dev: ['dev-14'], ift: ['ift-2'] };
+for (const branch of ['master', 'release']) {
+  for (const [env, stands] of Object.entries(RSS_STANDS)) {
+    for (const stand of stands) {
+      for (const service of RSS_SERVICES) {
+        const full = path.join(OUT, 'RSS__gitops', branch, 'stands', env, stand, service, 'values.yaml');
+        await fs.mkdir(path.dirname(full), { recursive: true });
+        await fs.writeFile(full, rssValues(service, branch));
+      }
+    }
+  }
+}
+
 console.log('demo-data generated at', OUT);

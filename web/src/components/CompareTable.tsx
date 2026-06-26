@@ -3,6 +3,7 @@ import type { CompareResult, FileSummary, OverrideEntry, RowStatus } from '../ty
 import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
 import { DiffModal, type DiffModalData } from './DiffModal';
+import { BadgeToggle, useToggleSet } from './statusFilter';
 
 const STATUS_LABEL: Record<RowStatus, string> = {
   equal: '=',
@@ -40,7 +41,7 @@ function aggregate(occ: Occ[]): RowStatus {
 
 export function CompareTable({ result }: { result: CompareResult }) {
   const merged = result.mode === 'merged';
-  const [onlyDiff, setOnlyDiff] = useState(true);
+  const [statuses, toggleStatus] = useToggleSet<RowStatus>(['different', 'only_a', 'only_b']);
   const [query, setQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -84,25 +85,25 @@ export function CompareTable({ result }: { result: CompareResult }) {
   const visibleGroups = useMemo(
     () =>
       groups.filter((g) => {
-        if (onlyDiff && !g.hasDiff) return false;
+        if (!statuses.has(g.status)) return false;
         if (query && !g.variable.toLowerCase().includes(query.toLowerCase())) return false;
         if (fileFilter && !g.occ.some((o) => o.file === fileFilter)) return false;
         return true;
       }),
-    [groups, onlyDiff, query, fileFilter],
+    [groups, statuses, query, fileFilter],
   );
 
   const visibleMerged = useMemo(
     () =>
       mergedRows.filter((r) => {
-        if (onlyDiff && r.status === 'equal') return false;
+        if (!statuses.has(r.status)) return false;
         if (query && !r.variable.toLowerCase().includes(query.toLowerCase())) return false;
         return true;
       }),
-    [mergedRows, onlyDiff, query],
+    [mergedRows, statuses, query],
   );
 
-  useEffect(() => setLimit(PAGE), [result, onlyDiff, query, fileFilter]);
+  useEffect(() => setLimit(PAGE), [result, statuses, query, fileFilter]);
 
   const toggle = (key: string) =>
     setExpanded((prev) => {
@@ -131,20 +132,16 @@ export function CompareTable({ result }: { result: CompareResult }) {
     <div className="result">
       <div className="stats">
         <span>всего: {s.total}</span>
-        <span className="badge st-equal">равны: {s.equal}</span>
-        <span className="badge st-different">отличаются: {s.different}</span>
-        <span className="badge st-only_a">только A: {s.onlyA}</span>
-        <span className="badge st-only_b">только B: {s.onlyB}</span>
+        <BadgeToggle cls="st-equal" label="равны" count={s.equal} active={statuses.has('equal')} onToggle={() => toggleStatus('equal')} />
+        <BadgeToggle cls="st-different" label="отличаются" count={s.different} active={statuses.has('different')} onToggle={() => toggleStatus('different')} />
+        <BadgeToggle cls="st-only_a" label="только A" count={s.onlyA} active={statuses.has('only_a')} onToggle={() => toggleStatus('only_a')} />
+        <BadgeToggle cls="st-only_b" label="только B" count={s.onlyB} active={statuses.has('only_b')} onToggle={() => toggleStatus('only_b')} />
         {merged && <span className="muted">область: {result.scope === '' ? '(корень)' : result.scope}</span>}
       </div>
 
       {result.mode === 'by_file' && <FileSummaryPanel files={result.files} />}
 
       <div className="filters">
-        <label className="chk">
-          <input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} />
-          только отличия
-        </label>
         <input
           className="search"
           placeholder="поиск по переменной…"

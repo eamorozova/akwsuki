@@ -3,6 +3,7 @@ import type { CompareRssResult, RowStatus, RssRow } from '../types';
 import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
 import { DiffModal, type DiffModalData } from './DiffModal';
+import { BadgeToggle, useToggleSet } from './statusFilter';
 
 const PAGE = 150;
 const STATUS_LABEL: Record<RowStatus, string> = {
@@ -14,7 +15,7 @@ const STATUS_LABEL: Record<RowStatus, string> = {
 const isLong = (s: string | null): boolean => !!s && (s.includes('\n') || s.length > 80);
 
 export function RssTable({ result }: { result: CompareRssResult }) {
-  const [onlyDiff, setOnlyDiff] = useState(true);
+  const [statuses, toggleStatus] = useToggleSet<RowStatus>(['different', 'only_a', 'only_b']);
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [limit, setLimit] = useState(PAGE);
@@ -28,15 +29,15 @@ export function RssTable({ result }: { result: CompareRssResult }) {
   const visible = useMemo(
     () =>
       result.rows.filter((r) => {
-        if (onlyDiff && r.status === 'equal') return false;
+        if (!statuses.has(r.status)) return false;
         if (sourceFilter && r.source !== sourceFilter) return false;
         if (query && !r.param.toLowerCase().includes(query.toLowerCase())) return false;
         return true;
       }),
-    [result, onlyDiff, query, sourceFilter],
+    [result, statuses, query, sourceFilter],
   );
 
-  useEffect(() => setLimit(PAGE), [result, onlyDiff, query, sourceFilter]);
+  useEffect(() => setLimit(PAGE), [result, statuses, query, sourceFilter]);
 
   const open = (r: RssRow) =>
     setModal({
@@ -54,17 +55,13 @@ export function RssTable({ result }: { result: CompareRssResult }) {
     <div className="result">
       <div className="stats">
         <span>всего: {s.total}</span>
-        <span className="badge st-equal">равны: {s.equal}</span>
-        <span className="badge st-different">отличаются: {s.different}</span>
-        <span className="badge st-only_a">только A: {s.onlyA}</span>
-        <span className="badge st-only_b">только B: {s.onlyB}</span>
+        <BadgeToggle cls="st-equal" label="равны" count={s.equal} active={statuses.has('equal')} onToggle={() => toggleStatus('equal')} />
+        <BadgeToggle cls="st-different" label="отличаются" count={s.different} active={statuses.has('different')} onToggle={() => toggleStatus('different')} />
+        <BadgeToggle cls="st-only_a" label="только A" count={s.onlyA} active={statuses.has('only_a')} onToggle={() => toggleStatus('only_a')} />
+        <BadgeToggle cls="st-only_b" label="только B" count={s.onlyB} active={statuses.has('only_b')} onToggle={() => toggleStatus('only_b')} />
       </div>
 
       <div className="filters">
-        <label className="chk">
-          <input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} />
-          только отличия
-        </label>
         <input className="search" placeholder="поиск по параметру…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="filter-combo">
           <Combobox

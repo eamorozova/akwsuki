@@ -3,6 +3,7 @@ import type { CompareReleaseDeltaResult, ReleaseVerdict, RowReleaseDelta } from 
 import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
 import { DiffModal, type DiffModalData } from './DiffModal';
+import { BadgeToggle, useToggleSet } from './statusFilter';
 
 const PAGE = 150;
 
@@ -19,7 +20,7 @@ const rowLong = (r: RowReleaseDelta): boolean =>
   isLong(r.env1R1) || isLong(r.env1R2) || isLong(r.env2R1) || isLong(r.env2R2);
 
 export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResult }) {
-  const [showConsistent, setShowConsistent] = useState(false);
+  const [verdicts, toggleVerdict] = useToggleSet<ReleaseVerdict>(['only_env1', 'only_env2', 'divergent']);
   const [hideExpected, setHideExpected] = useState(false);
   const [query, setQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('');
@@ -31,16 +32,16 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
   const visible = useMemo(
     () =>
       result.rows.filter((r) => {
-        if (!showConsistent && (r.verdict === 'both_unchanged' || r.verdict === 'same_change')) return false;
+        if (!verdicts.has(r.verdict)) return false;
         if (hideExpected && r.verdict === 'divergent' && r.expectedEnvDiff) return false;
         if (query && !r.variable.toLowerCase().includes(query.toLowerCase())) return false;
         if (fileFilter && r.file !== fileFilter) return false;
         return true;
       }),
-    [result, showConsistent, hideExpected, query, fileFilter],
+    [result, verdicts, hideExpected, query, fileFilter],
   );
 
-  useEffect(() => setLimit(PAGE), [result, showConsistent, hideExpected, query, fileFilter]);
+  useEffect(() => setLimit(PAGE), [result, verdicts, hideExpected, query, fileFilter]);
 
   const open = (r: RowReleaseDelta) =>
     setModal({
@@ -73,18 +74,14 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
     <div className="result">
       <div className="stats">
         <span>всего: {s.total}</span>
-        <span className="badge vd-only_env1">только Окр.1: {s.onlyEnv1}</span>
-        <span className="badge vd-only_env2">только Окр.2: {s.onlyEnv2}</span>
-        <span className="badge vd-divergent">по-разному: {s.divergent}</span>
-        <span className="badge vd-same_change">одинаково: {s.sameChange}</span>
-        <span className="badge vd-both_unchanged">без изм.: {s.bothUnchanged}</span>
+        <BadgeToggle cls="vd-only_env1" label="только Окр.1" count={s.onlyEnv1} active={verdicts.has('only_env1')} onToggle={() => toggleVerdict('only_env1')} />
+        <BadgeToggle cls="vd-only_env2" label="только Окр.2" count={s.onlyEnv2} active={verdicts.has('only_env2')} onToggle={() => toggleVerdict('only_env2')} />
+        <BadgeToggle cls="vd-divergent" label="по-разному" count={s.divergent} active={verdicts.has('divergent')} onToggle={() => toggleVerdict('divergent')} />
+        <BadgeToggle cls="vd-same_change" label="одинаково" count={s.sameChange} active={verdicts.has('same_change')} onToggle={() => toggleVerdict('same_change')} />
+        <BadgeToggle cls="vd-both_unchanged" label="без изм." count={s.bothUnchanged} active={verdicts.has('both_unchanged')} onToggle={() => toggleVerdict('both_unchanged')} />
       </div>
 
       <div className="filters">
-        <label className="chk">
-          <input type="checkbox" checked={showConsistent} onChange={(e) => setShowConsistent(e.target.checked)} />
-          показать консистентные
-        </label>
         <label className="chk">
           <input type="checkbox" checked={hideExpected} onChange={(e) => setHideExpected(e.target.checked)} />
           скрыть ожидаемые из-за окружения

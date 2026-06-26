@@ -621,6 +621,18 @@ table.occ-table .occ-file {
   border-color: color-mix(in srgb, var(--diff) 45%, transparent);
   background: transparent;
 }
+.badge.toggle {
+  font-family: inherit;
+  margin: 0;
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+.badge.toggle.off {
+  opacity: 0.4;
+}
+.badge.toggle:hover {
+  opacity: 1;
+}
 td.status .badge {
   white-space: nowrap;
 }

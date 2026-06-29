@@ -52,8 +52,14 @@ export async function compareByFile(
       const valueA = sa ? sa.raw : null;
       const valueB = sb ? sb.raw : null;
       const row: RowByFile = { variable: name, file, valueA, valueB, status: compareValues(valueA, valueB) };
-      if (sa) row.eolA = sa.eol;
-      if (sb) row.eolB = sb.eol;
+      if (sa) {
+        row.eolA = sa.eol;
+        row.lineA = sa.line;
+      }
+      if (sb) {
+        row.eolB = sb.eol;
+        row.lineB = sb.line;
+      }
       rows.push(row);
     }
   }

@@ -12,6 +12,31 @@ export interface ScannedVariable {
   raw: string;
   /** Тип перевода строки внутри значения. */
   eol: EolKind;
+  /** 1-based номер строки ключа в файле (для привязки blame). */
+  line: number;
+}
+
+/**
+ * Регион blame: непрерывный блок строк файла с одним «последним» коммитом.
+ * Соответствует одному элементу ответа Bitbucket `browse?blame`.
+ */
+export interface BlameRegion {
+  /** 1-based номер первой строки региона. */
+  startLine: number;
+  /** Сколько строк покрывает регион (Bitbucket `spannedLines`). */
+  lineCount: number;
+  /** Человекочитаемый автор (displayName, иначе логин). */
+  author: string;
+  /** E-mail автора, если есть. */
+  authorEmail: string | null;
+  /** Дата авторства в ISO-8601. */
+  date: string;
+  /** Полный хэш коммита. */
+  commitHash: string;
+  /** Короткий хэш коммита (для отображения). */
+  commitShort: string;
+  /** Готовая ссылка на коммит в Bitbucket. */
+  commitUrl: string;
 }
 
 /** Результат сканирования одного файла. */
@@ -37,6 +62,9 @@ export interface RowByFile {
   valueB: string | null;
   eolA?: EolKind;
   eolB?: EolKind;
+  /** Строка ключа в файле стороны A / B (для blame); undefined, если переменной нет. */
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 
@@ -137,6 +165,11 @@ export interface RowReleaseDelta {
   verdict: ReleaseVerdict;
   /** Значения различались между стендами уже на релиз1 (вероятно, специфика окружения). */
   expectedEnvDiff: boolean;
+  /** Строки ключа в каждом из четырёх файлов (для blame); undefined, если значения нет. */
+  lineEnv1R1?: number;
+  lineEnv1R2?: number;
+  lineEnv2R1?: number;
+  lineEnv2R2?: number;
 }
 
 export interface ReleaseDeltaStats {

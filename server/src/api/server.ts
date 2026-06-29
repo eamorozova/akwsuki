@@ -149,6 +149,23 @@ export async function buildServer(deps: ServerDeps, opts: ServerOptions = {}): P
     }
   });
 
+  // blame файла на ветке (ленивая загрузка: фронт запрашивает по раскрытию строки)
+  app.get<{ Querystring: { fp?: string; branch?: string; path?: string } }>('/api/blame', async (req, reply) => {
+    const { fp, branch, path } = req.query;
+    if (![fp, branch, path].every((v) => typeof v === 'string' && v)) {
+      reply.code(400);
+      return { error: 'query params fp, branch, path are required' };
+    }
+    try {
+      const regions = await deps.getProvider(fp!).blameFile(branch!, path!);
+      // null → источник не поддерживает blame (локальные фикстуры)
+      return { available: regions !== null, regions: regions ?? [] };
+    } catch (e) {
+      reply.code(502);
+      return { error: (e as Error).message };
+    }
+  });
+
   // стенды из get_stand_params.groovy на ветке (для выпадающих списков)
   app.get<{ Params: { fp: string }; Querystring: { branch?: string } }>(
     '/api/fp/:fp/stands',

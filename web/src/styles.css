@@ -733,6 +733,39 @@ col.c-verdict {
   background: transparent;
   font-weight: 500;
 }
+.more.blame-toggle {
+  display: block;
+  margin-top: 6px;
+}
+
+/* ---- blame-аннотации под значениями (режим «Дельта») ---- */
+.blame {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  margin: 2px 0 6px 26px; /* под отступ rtag «р1/р2» */
+  font-size: 11px;
+  line-height: 1.4;
+}
+.blame.muted {
+  color: var(--muted);
+  font-style: italic;
+}
+.blame-author {
+  font-weight: 600;
+}
+.blame-date {
+  color: var(--muted);
+}
+.blame-commit {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent);
+  text-decoration: none;
+}
+.blame-commit:hover {
+  text-decoration: underline;
+}
 
 /* ---- модалка просмотра больших значений ---- */
 .modal-overlay {

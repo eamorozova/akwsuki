@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { BranchQuery, FileProvider, RepoFile } from './FileProvider';
+import type { BlameRegion } from '../domain/types';
 
 const YAML_RE = /\.ya?ml$/i;
 
@@ -36,6 +37,11 @@ export class LocalFsProvider implements FileProvider {
 
   async listSubdirs(branch: string, dirPath: string): Promise<string[]> {
     return this.listDirs(path.join(this.root, branch, ...dirPath.split('/')));
+  }
+
+  /** Локальные фикстуры — не git-репозиторий, blame недоступен. */
+  async blameFile(): Promise<BlameRegion[] | null> {
+    return null;
   }
 
   async readEnvYamlFiles(branch: string, env: string): Promise<RepoFile[]> {

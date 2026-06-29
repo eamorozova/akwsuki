@@ -1,6 +1,7 @@
 import https from 'node:https';
 import axios from 'axios';
 import type { BranchQuery, FileProvider, RepoFile } from './FileProvider';
+import type { BlameRegion } from '../domain/types';
 
 /** Минимальный транспорт (совместим с экземпляром axios); подменяется в тестах. */
 export interface HttpClient {
@@ -113,6 +114,39 @@ export class BitbucketProvider implements FileProvider {
       if (i > 0) dirs.add(f.slice(0, i));
     }
     return [...dirs].sort();
+  }
+
+  async blameFile(branch: string, filePath: string): Promise<BlameRegion[]> {
+    // GET /browse/<path>?at=<ref>&blame=true&noContent=true — постранично, как /files
+    const url = `/browse/${encodePath(filePath)}`;
+    const out: BlameRegion[] = [];
+    let start = 0;
+    for (;;) {
+      const page = await this.getPage(url, { at: branch, blame: true, noContent: true, limit: 1000, start });
+      for (const v of page.values ?? []) out.push(this.toBlameRegion(v));
+      if (page.isLastPage !== false || page.nextPageStart == null) break;
+      start = page.nextPageStart;
+    }
+    return out;
+  }
+
+  /** Маппинг одного элемента ответа `browse?blame` в наш BlameRegion (поля читаем защитно). */
+  private toBlameRegion(v: unknown): BlameRegion {
+    const o = (v ?? {}) as Record<string, unknown>;
+    const author = (o.author ?? {}) as Record<string, unknown>;
+    const ts = o.authorTimestamp;
+    const hash = String(o.commitHash ?? o.commitId ?? '');
+    const short = String(o.displayCommitHash ?? o.commitDisplayId ?? hash.slice(0, 10));
+    return {
+      startLine: typeof o.lineNumber === 'number' ? o.lineNumber : 1,
+      lineCount: typeof o.spannedLines === 'number' ? o.spannedLines : 1,
+      author: String(author.displayName ?? author.name ?? 'неизвестно'),
+      authorEmail: typeof author.emailAddress === 'string' ? author.emailAddress : null,
+      date: typeof ts === 'number' ? new Date(ts).toISOString() : '',
+      commitHash: hash,
+      commitShort: short,
+      commitUrl: `${this.opts.baseUrl}/projects/${this.opts.project}/repos/${this.opts.repo}/commits/${hash}`,
+    };
   }
 
   /** Список путей файлов под каталогом (рекурсивно), относительно него. */

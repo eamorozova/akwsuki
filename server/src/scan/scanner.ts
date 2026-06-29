@@ -25,13 +25,17 @@ export function scanFile(filePath: string, content: string): ScannedFile {
       if (isMap(root)) {
         for (const pair of root.items) {
           const name = keyName(pair.key);
-          const raw = sliceNode(content, pair.value as RangedNode | null);
-          variables.push({ name, raw, eol: detectEol(raw) });
+          const key = pair.key as RangedNode | null;
+          const value = pair.value as RangedNode | null;
+          const raw = sliceNode(content, value);
+          const off = key?.range?.[0] ?? value?.range?.[0] ?? 0;
+          variables.push({ name, raw, eol: detectEol(raw), line: lineAt(content, off) });
         }
       } else if (root) {
         // Корень не-map (скаляр/последовательность) — одна псевдо-переменная.
-        const raw = sliceNode(content, root as RangedNode);
-        variables.push({ name: '(root)', raw, eol: detectEol(raw) });
+        const node = root as RangedNode;
+        const raw = sliceNode(content, node);
+        variables.push({ name: '(root)', raw, eol: detectEol(raw), line: lineAt(content, node.range?.[0] ?? 0) });
       }
     }
   } catch (e) {
@@ -51,4 +55,12 @@ function sliceNode(src: string, node: RangedNode | null): string {
   const r = node?.range;
   if (!r) return '';
   return src.slice(r[0], r[1]);
+}
+
+/** 1-based номер строки для символьного смещения (считаем \n до offset; CRLF учитывается). */
+function lineAt(src: string, offset: number): number {
+  let line = 1;
+  const end = Math.min(offset, src.length);
+  for (let i = 0; i < end; i++) if (src.charCodeAt(i) === 10) line++;
+  return line;
 }

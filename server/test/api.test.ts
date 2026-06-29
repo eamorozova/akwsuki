@@ -6,6 +6,8 @@ import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/api/server';
 import { LocalFsProvider } from '../src/provider/LocalFsProvider';
 import type { ServerDeps } from '../src/config/appConfig';
+import type { FileProvider } from '../src/provider/FileProvider';
+import type { BlameRegion } from '../src/domain/types';
 
 let root: string;
 let app: FastifyInstance;
@@ -119,6 +121,58 @@ describe('API', () => {
   it('POST /api/compare-release-delta валидирует тело → 400', async () => {
     const r = await app.inject({ method: 'POST', url: '/api/compare-release-delta', payload: { fp: 'SDS' } });
     expect(r.statusCode).toBe(400);
+  });
+
+  it('GET /api/blame в local-режиме → available:false', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/blame?fp=SDS&branch=master&path=DEV/postgres.yaml' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ available: false, regions: [] });
+  });
+
+  it('GET /api/blame без обязательных параметров → 400', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/blame?fp=SDS&branch=master' });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it('GET /api/blame отдаёт регионы провайдера (available:true)', async () => {
+    const region: BlameRegion = {
+      startLine: 1,
+      lineCount: 2,
+      author: 'Данилова Любовь Юрьевна',
+      authorEmail: 'LYDanilova@sberbank.ru',
+      date: '2022-02-16T12:15:46.000Z',
+      commitHash: '9f96effeef05aff1e616b6e3736e8f7d2441fa21',
+      commitShort: '9f96effeef0',
+      commitUrl: 'https://stash/projects/P/repos/R/commits/9f96effeef05aff1e616b6e3736e8f7d2441fa21',
+    };
+    const stub = async () => {
+      throw new Error('not used by blame route');
+    };
+    const fakeProvider: FileProvider = {
+      listBranches: stub,
+      listEnvs: stub,
+      readEnvYamlFiles: stub,
+      readFile: stub,
+      listSubdirs: stub,
+      blameFile: async (_branch, p) => (p === 'DEV/postgres.yaml' ? [region] : null),
+    };
+    const deps: ServerDeps = {
+      async listFps() {
+        return ['SDS'];
+      },
+      getProvider: () => fakeProvider,
+      getSharedProvider: () => fakeProvider,
+      standParamsPath: 'vars/get_stand_params.groovy',
+      async listGitopsFps() {
+        return [];
+      },
+      getGitopsProvider: () => fakeProvider,
+    };
+    const app2 = await buildServer(deps);
+    const r = await app2.inject({ method: 'GET', url: '/api/blame?fp=SDS&branch=master&path=DEV/postgres.yaml' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ available: true, regions: [region] });
+    await app2.close();
   });
 
   it('GET /api/fp/:fp/stands возвращает стенды из groovy-файла', async () => {

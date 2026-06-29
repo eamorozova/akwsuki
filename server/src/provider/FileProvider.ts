@@ -1,3 +1,5 @@
+import type { BlameRegion } from '../domain/types';
+
 /** Файл конфига, прочитанный из репозитория. */
 export interface RepoFile {
   /** Относительный путь внутри папки-окружения (POSIX-разделители). */
@@ -32,4 +34,9 @@ export interface FileProvider {
   readFile(branch: string, filePath: string): Promise<string | null>;
   /** Имена подпапок по заданному пути на ветке (для навигации stands/<env>/<stand>). */
   listSubdirs(branch: string, dirPath: string): Promise<string[]>;
+  /**
+   * Blame файла на ветке: регионы строк с «последним» коммитом.
+   * `null` — источник не поддерживает blame (напр. локальные фикстуры).
+   */
+  blameFile(branch: string, filePath: string): Promise<BlameRegion[] | null>;
 }

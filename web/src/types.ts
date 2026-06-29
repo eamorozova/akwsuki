@@ -90,6 +90,29 @@ export interface RowReleaseDelta {
   statusEnv2: RowStatus;
   verdict: ReleaseVerdict;
   expectedEnvDiff: boolean;
+  /** Строки ключа в каждом из четырёх файлов (для blame). */
+  lineEnv1R1?: number;
+  lineEnv1R2?: number;
+  lineEnv2R1?: number;
+  lineEnv2R2?: number;
+}
+
+/** Регион blame: блок строк файла с одним «последним» коммитом. */
+export interface BlameRegion {
+  startLine: number;
+  lineCount: number;
+  author: string;
+  authorEmail: string | null;
+  date: string;
+  commitHash: string;
+  commitShort: string;
+  commitUrl: string;
+}
+
+/** Ответ /api/blame: `available=false` — источник не поддерживает blame (local-режим). */
+export interface BlameResponse {
+  available: boolean;
+  regions: BlameRegion[];
 }
 
 export interface ReleaseDeltaStats {

@@ -1,16 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import type {
-  BlameRegion,
-  BlameResponse,
-  CompareReleaseDeltaResult,
-  ReleaseVerdict,
-  RowReleaseDelta,
-} from '../types';
-import { api } from '../api';
+import type { CompareReleaseDeltaResult, ReleaseVerdict, RowReleaseDelta } from '../types';
 import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
 import { DiffModal, type DiffModalData } from './DiffModal';
 import { BadgeToggle, useToggleSet } from './statusFilter';
+import { useBlame, BlameTag, type BlameCell } from './blame';
 
 const PAGE = 150;
 
@@ -26,15 +20,6 @@ const isLong = (s: string | null): boolean => !!s && (s.includes('\n') || s.leng
 const rowLong = (r: RowReleaseDelta): boolean =>
   isLong(r.env1R1) || isLong(r.env1R2) || isLong(r.env2R1) || isLong(r.env2R2);
 
-/**
- * Состояние blame для одной строки-значения:
- *  undefined — значения нет (строку не блеймим); 'loading' — грузится;
- *  'unavailable' — источник без blame (local); null — загружено, но региона на строку нет;
- *  BlameRegion — найденный автор/дата/коммит.
- */
-type BlameCell = BlameRegion | 'loading' | 'unavailable' | null | undefined;
-
-const fileKey = (branch: string, path: string): string => `${branch}|||${path}`;
 const cellPath = (env: string, file: string): string => `${env}/${file}`;
 
 export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResult }) {
@@ -44,10 +29,8 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
   const [fileFilter, setFileFilter] = useState('');
   const [limit, setLimit] = useState(PAGE);
   const [modal, setModal] = useState<DiffModalData | null>(null);
-  // blame: какие строки раскрыты + кэш ответов по файлу (branch|||path)
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [blame, setBlame] = useState<Record<string, BlameResponse>>({});
-  const [blameLoading, setBlameLoading] = useState<Set<string>>(new Set());
+  const blame = useBlame(result.fp);
 
   const allFiles = useMemo(() => [...new Set(result.rows.map((r) => r.file))].sort(), [result]);
 
@@ -64,30 +47,12 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
   );
 
   useEffect(() => setLimit(PAGE), [result, verdicts, hideExpected, query, fileFilter]);
-  // новый результат сравнения — сбрасываем раскрытые строки и кэш blame (другой ФП/релизы)
+  // новый результат — сбрасываем раскрытые строки и кэш blame
   useEffect(() => {
     setExpanded(new Set());
-    setBlame({});
-    setBlameLoading(new Set());
+    blame.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
-
-  /** Лениво тянем blame файла (один раз на branch+path), результат кладём в кэш. */
-  const ensureBlame = (branch: string, path: string) => {
-    const fk = fileKey(branch, path);
-    if (blame[fk] || blameLoading.has(fk)) return;
-    setBlameLoading((prev) => new Set(prev).add(fk));
-    api
-      .blame(result.fp, branch, path)
-      .then((res) => setBlame((prev) => ({ ...prev, [fk]: res })))
-      .catch(() => setBlame((prev) => ({ ...prev, [fk]: { available: false, regions: [] } })))
-      .finally(() =>
-        setBlameLoading((prev) => {
-          const next = new Set(prev);
-          next.delete(fk);
-          return next;
-        }),
-      );
-  };
 
   const toggleRow = (r: RowReleaseDelta) => {
     const key = `${r.variable}|||${r.file}`;
@@ -100,20 +65,11 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
       return;
     }
     setExpanded((prev) => new Set(prev).add(key));
-    // четыре файла: оба окружения × оба релиза
-    ensureBlame(result.branchR1, cellPath(result.env1, r.file));
-    ensureBlame(result.branchR2, cellPath(result.env1, r.file));
-    ensureBlame(result.branchR1, cellPath(result.env2, r.file));
-    ensureBlame(result.branchR2, cellPath(result.env2, r.file));
-  };
-
-  /** Blame-аннотация для конкретной (ветка, файл, строка). */
-  const blameState = (branch: string, path: string, line?: number): BlameCell => {
-    if (line == null) return undefined;
-    const res = blame[fileKey(branch, path)];
-    if (!res) return 'loading';
-    if (!res.available) return 'unavailable';
-    return res.regions.find((g) => line >= g.startLine && line < g.startLine + g.lineCount) ?? null;
+    // четыре файла: оба окружения × оба релиза (репозиторий конфигов ФП)
+    blame.ensure('config', result.branchR1, cellPath(result.env1, r.file));
+    blame.ensure('config', result.branchR2, cellPath(result.env1, r.file));
+    blame.ensure('config', result.branchR1, cellPath(result.env2, r.file));
+    blame.ensure('config', result.branchR2, cellPath(result.env2, r.file));
   };
 
   const open = (r: RowReleaseDelta) =>
@@ -206,8 +162,8 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
                     status={r.statusEnv1}
                     r1={r.env1R1}
                     r2={r.env1R2}
-                    blameR1={exp ? blameState(result.branchR1, cellPath(result.env1, r.file), r.lineEnv1R1) : undefined}
-                    blameR2={exp ? blameState(result.branchR2, cellPath(result.env1, r.file), r.lineEnv1R2) : undefined}
+                    blameR1={exp ? blame.state('config', result.branchR1, cellPath(result.env1, r.file), r.lineEnv1R1) : undefined}
+                    blameR2={exp ? blame.state('config', result.branchR2, cellPath(result.env1, r.file), r.lineEnv1R2) : undefined}
                   />
                   {rowLong(r) && (
                     <button className="more" onClick={() => open(r)}>
@@ -220,8 +176,8 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
                     status={r.statusEnv2}
                     r1={r.env2R1}
                     r2={r.env2R2}
-                    blameR1={exp ? blameState(result.branchR1, cellPath(result.env2, r.file), r.lineEnv2R1) : undefined}
-                    blameR2={exp ? blameState(result.branchR2, cellPath(result.env2, r.file), r.lineEnv2R2) : undefined}
+                    blameR1={exp ? blame.state('config', result.branchR1, cellPath(result.env2, r.file), r.lineEnv2R1) : undefined}
+                    blameR2={exp ? blame.state('config', result.branchR2, cellPath(result.env2, r.file), r.lineEnv2R2) : undefined}
                   />
                 </td>
                 <td className="status">
@@ -232,7 +188,7 @@ export function ReleaseDeltaTable({ result }: { result: CompareReleaseDeltaResul
                     </span>
                   )}
                   <button className="more blame-toggle" onClick={() => toggleRow(r)}>
-                    {exp ? 'скрыть blame' : 'кто менял'}
+                    {exp ? 'скрыть blame' : 'blame'}
                   </button>
                 </td>
               </tr>
@@ -290,23 +246,6 @@ function DeltaCell({
         <span className="val">{previewNodes(status, 'B', r1, r2)}</span>
       </div>
       <BlameTag state={blameR2} />
-    </div>
-  );
-}
-
-/** Строка blame под значением: автор · дата · ссылка на коммит. */
-function BlameTag({ state }: { state?: BlameCell }) {
-  if (state === undefined) return null;
-  if (state === 'loading') return <div className="blame muted">blame…</div>;
-  if (state === 'unavailable') return <div className="blame muted">blame доступен только в bitbucket-режиме</div>;
-  if (state === null) return <div className="blame muted">— нет данных blame</div>;
-  return (
-    <div className="blame" title={state.authorEmail ?? undefined}>
-      <span className="blame-author">{state.author}</span>
-      {state.date && <span className="blame-date">{state.date.slice(0, 10)}</span>}
-      <a className="blame-commit" href={state.commitUrl} target="_blank" rel="noreferrer">
-        {state.commitShort}
-      </a>
     </div>
   );
 }

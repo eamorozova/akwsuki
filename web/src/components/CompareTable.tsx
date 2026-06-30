@@ -4,6 +4,7 @@ import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
 import { DiffModal, type DiffModalData } from './DiffModal';
 import { BadgeToggle, useToggleSet } from './statusFilter';
+import { useBlame, BlameTag } from './blame';
 
 const STATUS_LABEL: Record<RowStatus, string> = {
   equal: '=',
@@ -21,6 +22,8 @@ interface Occ {
   file: string;
   valueA: string | null;
   valueB: string | null;
+  lineA?: number; // строка ключа в файле стороны A / B (для blame)
+  lineB?: number;
   status: RowStatus; // сравнение A↔B ДЛЯ ЭТОГО ФАЙЛА (на его уровне вложенности)
 }
 
@@ -45,11 +48,16 @@ export function CompareTable({ result }: { result: CompareResult }) {
   const [query, setQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [blameOpen, setBlameOpen] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(PAGE);
   const [modal, setModal] = useState<DiffModalData | null>(null);
+  const blame = useBlame(result.fp);
 
   const sideA = `${result.sideA.branch} / ${result.sideA.env}`;
   const sideB = `${result.sideB.branch} / ${result.sideB.env}`;
+  // полный путь файла в репозитории конфигов = окружение + путь относительно него
+  const pathA = (rel: string): string => `${result.sideA.env}/${rel}`;
+  const pathB = (rel: string): string => `${result.sideB.env}/${rel}`;
 
   const byFileRows = result.mode === 'by_file' ? result.rows : [];
   const mergedRows = result.mode === 'merged' ? result.rows : [];
@@ -57,7 +65,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
   const groups = useMemo<Group[]>(() => {
     const map = new Map<string, Occ[]>();
     for (const r of byFileRows) {
-      const occ: Occ = { file: r.file, valueA: r.valueA, valueB: r.valueB, status: r.status };
+      const occ: Occ = { file: r.file, valueA: r.valueA, valueB: r.valueB, lineA: r.lineA, lineB: r.lineB, status: r.status };
       const arr = map.get(r.variable);
       if (arr) arr.push(occ);
       else map.set(r.variable, [occ]);
@@ -104,6 +112,11 @@ export function CompareTable({ result }: { result: CompareResult }) {
   );
 
   useEffect(() => setLimit(PAGE), [result, statuses, query, fileFilter]);
+  useEffect(() => {
+    setBlameOpen(new Set());
+    blame.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
 
   const toggle = (key: string) =>
     setExpanded((prev) => {
@@ -112,6 +125,21 @@ export function CompareTable({ result }: { result: CompareResult }) {
       else next.add(key);
       return next;
     });
+
+  /** Раскрыть/свернуть blame строки; при раскрытии — лениво подгрузить файлы сторон A/B. */
+  const toggleBlame = (key: string, relA: string | null, lineA?: number, relB?: string | null, lineB?: number) => {
+    if (blameOpen.has(key)) {
+      setBlameOpen((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      return;
+    }
+    setBlameOpen((prev) => new Set(prev).add(key));
+    if (relA && lineA != null) blame.ensure('config', result.sideA.branch, pathA(relA));
+    if (relB && lineB != null) blame.ensure('config', result.sideB.branch, pathB(relB));
+  };
 
   const openValue = (variable: string, file: string, status: RowStatus, valueA: string | null, valueB: string | null) =>
     setModal({
@@ -186,6 +214,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
             shownMerged.map((r) => {
               const key = `${r.variable}|||${r.file}`;
               const exp = expanded.has(key);
+              const bOpen = blameOpen.has(key);
               const long = isLong(r.valueA) || isLong(r.valueB);
               const hasTrail = (r.overridesA?.length ?? 0) > 1 || (r.overridesB?.length ?? 0) > 1;
               return (
@@ -195,6 +224,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
                   <td className="cell">
                     <div className="val">{previewNodes(r.status, 'A', r.valueA, r.valueB)}</div>
                     {r.sourceA && <div className="src">← {r.sourceA}</div>}
+                    {bOpen && <BlameTag state={blame.state('config', result.sideA.branch, pathA(r.sourceA ?? ''), r.lineA)} />}
                     {exp && <OverrideTrail entries={r.overridesA} />}
                     <div className="cell-actions">
                       {long && (
@@ -212,10 +242,14 @@ export function CompareTable({ result }: { result: CompareResult }) {
                   <td className="cell">
                     <div className="val">{previewNodes(r.status, 'B', r.valueA, r.valueB)}</div>
                     {r.sourceB && <div className="src">← {r.sourceB}</div>}
+                    {bOpen && <BlameTag state={blame.state('config', result.sideB.branch, pathB(r.sourceB ?? ''), r.lineB)} />}
                     {exp && <OverrideTrail entries={r.overridesB} />}
                   </td>
                   <td className="status">
                     <span className={`badge st-${r.status}`}>{STATUS_LABEL[r.status]}</span>
+                    <button className="more blame-toggle" onClick={() => toggleBlame(key, r.sourceA, r.lineA, r.sourceB, r.lineB)}>
+                      {bOpen ? 'скрыть blame' : 'blame'}
+                    </button>
                   </td>
                 </tr>
               );
@@ -225,6 +259,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
             shownGroups.map((g) => {
               const key = g.variable;
               const exp = expanded.has(key);
+              const bOpen = blameOpen.has(key);
               const rep = g.rep;
               const long = isLong(rep.valueA) || isLong(rep.valueB);
               const multi = g.occ.length > 1;
@@ -238,6 +273,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
                     </td>
                     <td className="cell">
                       <div className="val">{previewNodes(rep.status, 'A', rep.valueA, rep.valueB)}</div>
+                      {bOpen && <BlameTag state={blame.state('config', result.sideA.branch, pathA(rep.file), rep.lineA)} />}
                       <div className="cell-actions">
                         {long && (
                           <button className="more" onClick={() => openValue(g.variable, rep.file, rep.status, rep.valueA, rep.valueB)}>
@@ -253,6 +289,7 @@ export function CompareTable({ result }: { result: CompareResult }) {
                     </td>
                     <td className="cell">
                       <div className="val">{previewNodes(rep.status, 'B', rep.valueA, rep.valueB)}</div>
+                      {bOpen && <BlameTag state={blame.state('config', result.sideB.branch, pathB(rep.file), rep.lineB)} />}
                     </td>
                     <td className="status">
                       <span className={`badge st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
@@ -261,6 +298,9 @@ export function CompareTable({ result }: { result: CompareResult }) {
                           слои ≠
                         </span>
                       )}
+                      <button className="more blame-toggle" onClick={() => toggleBlame(key, rep.file, rep.lineA, rep.file, rep.lineB)}>
+                        {bOpen ? 'скрыть blame' : 'blame'}
+                      </button>
                     </td>
                   </tr>
                   {exp && multi && (

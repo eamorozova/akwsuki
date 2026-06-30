@@ -2,6 +2,7 @@ import { parseAllDocuments, isMap, isScalar, stringify } from 'yaml';
 import type { RepoFile } from '../provider/FileProvider';
 import type { EolKind, OverrideEntry } from '../domain/types';
 import { detectEol } from '../diff/textDiff';
+import { lineAt } from '../scan/lineAt';
 
 /** Эффективная переменная после применения цепочки переопределения (глубокое слияние). */
 export interface MergedVar {
@@ -13,6 +14,8 @@ export interface MergedVar {
   eol: EolKind;
   /** Наиболее специфичный (глубокий) слой, участвовавший в значении. */
   source: string;
+  /** Строка ключа переменной в файле-источнике (для blame). */
+  sourceLine: number;
   /** Трейл вкладов слоёв от базового к глубокому (сырой текст значения каждого слоя). */
   overrides: OverrideEntry[];
 }
@@ -61,6 +64,7 @@ interface ParsedVar {
   name: string;
   js: unknown;
   raw: string;
+  line: number;
 }
 
 /** Парсит файл в значения ключей верхнего уровня: js-структуру (для слияния) и сырой текст (для трейла). */
@@ -72,10 +76,12 @@ function parseForMerge(content: string): ParsedVar[] {
       if (!isMap(root)) continue;
       for (const pair of root.items) {
         const name = isScalar(pair.key) ? String(pair.key.value) : String(pair.key);
+        const keyNode = pair.key as { range?: [number, number, number] } | null;
         const valueNode = pair.value as { toJSON?: () => unknown; range?: [number, number, number] } | null;
         const js = valueNode && typeof valueNode.toJSON === 'function' ? valueNode.toJSON() : null;
         const raw = valueNode?.range ? content.slice(valueNode.range[0], valueNode.range[1]) : '';
-        out.push({ name, js, raw });
+        const off = keyNode?.range?.[0] ?? valueNode?.range?.[0] ?? 0;
+        out.push({ name, js, raw, line: lineAt(content, off) });
       }
     }
   } catch {
@@ -109,6 +115,7 @@ export function mergeScope(files: RepoFile[], scope: string): Map<string, Merged
     file: string;
     js: unknown;
     source: string;
+    sourceLine: number;
     overrides: OverrideEntry[];
   }
   const acc = new Map<string, Acc>();
@@ -119,10 +126,11 @@ export function mergeScope(files: RepoFile[], scope: string): Map<string, Merged
       const key = `${base}|||${v.name}`;
       const cur = acc.get(key);
       if (!cur) {
-        acc.set(key, { variable: v.name, file: base, js: v.js, source: f.path, overrides: [{ file: f.path, value: v.raw }] });
+        acc.set(key, { variable: v.name, file: base, js: v.js, source: f.path, sourceLine: v.line, overrides: [{ file: f.path, value: v.raw }] });
       } else {
         cur.js = deepMerge(cur.js, v.js);
         cur.source = f.path;
+        cur.sourceLine = v.line; // победитель — самый глубокий слой
         cur.overrides.push({ file: f.path, value: v.raw });
       }
     }
@@ -131,7 +139,7 @@ export function mergeScope(files: RepoFile[], scope: string): Map<string, Merged
   const out = new Map<string, MergedVar>();
   for (const [key, c] of acc) {
     const value = serializeValue(c.js);
-    out.set(key, { variable: c.variable, file: c.file, value, eol: detectEol(value), source: c.source, overrides: c.overrides });
+    out.set(key, { variable: c.variable, file: c.file, value, eol: detectEol(value), source: c.source, sourceLine: c.sourceLine, overrides: c.overrides });
   }
   return out;
 }

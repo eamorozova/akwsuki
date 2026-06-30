@@ -150,14 +150,21 @@ export async function buildServer(deps: ServerDeps, opts: ServerOptions = {}): P
   });
 
   // blame файла на ветке (ленивая загрузка: фронт запрашивает по раскрытию строки)
-  app.get<{ Querystring: { fp?: string; branch?: string; path?: string } }>('/api/blame', async (req, reply) => {
-    const { fp, branch, path } = req.query;
+  app.get<{ Querystring: { fp?: string; branch?: string; path?: string; repo?: string } }>('/api/blame', async (req, reply) => {
+    const { fp, branch, path, repo } = req.query;
     if (![fp, branch, path].every((v) => typeof v === 'string' && v)) {
       reply.code(400);
       return { error: 'query params fp, branch, path are required' };
     }
+    // repo выбирает репозиторий: config (конфиги ФП) | shared (shared_libs) | gitops (RSS)
+    const pick = () =>
+      repo === 'shared'
+        ? deps.getSharedProvider(fp!)
+        : repo === 'gitops'
+          ? deps.getGitopsProvider(fp!)
+          : deps.getProvider(fp!);
     try {
-      const regions = await deps.getProvider(fp!).blameFile(branch!, path!);
+      const regions = await pick().blameFile(branch!, path!);
       // null → источник не поддерживает blame (локальные фикстуры)
       return { available: regions !== null, regions: regions ?? [] };
     } catch (e) {

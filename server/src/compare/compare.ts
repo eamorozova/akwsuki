@@ -108,8 +108,14 @@ export async function compareMerged(
       overridesB: mb?.overrides ?? [],
       status: compareValues(valueA, valueB),
     };
-    if (ma) row.eolA = ma.eol;
-    if (mb) row.eolB = mb.eol;
+    if (ma) {
+      row.eolA = ma.eol;
+      row.lineA = ma.sourceLine;
+    }
+    if (mb) {
+      row.eolB = mb.eol;
+      row.lineB = mb.sourceLine;
+    }
     rows.push(row);
   }
   sortRows(rows);

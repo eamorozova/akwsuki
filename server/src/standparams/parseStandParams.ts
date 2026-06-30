@@ -7,11 +7,15 @@
  * строки '…' / "…" / тройные, числа, true/false/null, комментарии // и /* *\/,
  * висячие запятые. Интерполяция ${…} в строках берётся как есть.
  */
+import { lineAt } from '../scan/lineAt';
+
 export interface Stand {
   alias: string;
   env: string;
   /** Все параметры стенда, значение сериализовано в строку. */
   params: Record<string, string>;
+  /** 1-based строка ключа каждого параметра в groovy-файле (для blame). */
+  paramLines: Record<string, number>;
 }
 
 type Json = string | number | boolean | null | Json[] | { [k: string]: Json };
@@ -38,6 +42,7 @@ export function parseStandParams(src: string): Stand[] {
         alias: typeof map['STAND_ALIAS'] === 'string' ? (map['STAND_ALIAS'] as string) : '',
         env: typeof map['ENV_ALIAS'] === 'string' ? (map['ENV_ALIAS'] as string) : '',
         params,
+        paramLines: parser.linesFor(map),
       });
     }
   }
@@ -52,10 +57,18 @@ function serialize(v: Json): string {
 }
 
 class Parser {
+  /** Строки ключей каждого распарсенного map (по идентичности объекта). */
+  private readonly keyLines = new Map<object, Record<string, number>>();
+
   constructor(
     private readonly s: string,
     private pos: number,
   ) {}
+
+  /** Строки ключей для конкретного map-объекта ({} если не отслеживались). */
+  linesFor(obj: object): Record<string, number> {
+    return this.keyLines.get(obj) ?? {};
+  }
 
   parseValue(): Json {
     this.skipWs();
@@ -81,26 +94,32 @@ class Parser {
       return {};
     }
 
+    const firstStart = this.pos;
     const first = this.parseValue();
     this.skipWs();
 
     if (this.s[this.pos] === ':') {
       // map
       const map: { [k: string]: Json } = {};
+      const lines: Record<string, number> = {};
       this.pos++; // ':'
       map[String(first)] = this.parseValue();
+      lines[String(first)] = lineAt(this.s, firstStart);
       this.skipWs();
       while (this.s[this.pos] === ',') {
         this.pos++;
         this.skipWs();
         if (this.s[this.pos] === ']') break;
+        const keyStart = this.pos;
         const key = this.parseValue();
         this.skipWs();
         if (this.s[this.pos] === ':') this.pos++;
         map[String(key)] = this.parseValue();
+        lines[String(key)] = lineAt(this.s, keyStart);
         this.skipWs();
       }
       if (this.s[this.pos] === ']') this.pos++;
+      this.keyLines.set(map, lines);
       return map;
     }
 

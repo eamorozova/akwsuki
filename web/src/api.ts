@@ -51,10 +51,10 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ fp, env1, env2, branchR1, branchR2 }),
     }),
-  blame: (fp: string, branch: string, path: string) =>
-    j<BlameResponse>(
-      `/api/blame?fp=${encodeURIComponent(fp)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`,
-    ),
+  blame: (fp: string, branch: string, path: string, repo?: 'config' | 'shared' | 'gitops') => {
+    const base = `/api/blame?fp=${encodeURIComponent(fp)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`;
+    return j<BlameResponse>(repo && repo !== 'config' ? `${base}&repo=${repo}` : base);
+  },
   stands: (fp: string, branch: string) =>
     j<StandInfo[]>(`/api/fp/${encodeURIComponent(fp)}/stands?branch=${encodeURIComponent(branch)}`),
   compareStands: (fp: string, branch1: string, stand1: string, branch2: string, stand2: string) =>

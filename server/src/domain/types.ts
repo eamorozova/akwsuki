@@ -126,6 +126,9 @@ export interface RowMerged {
   overridesB: OverrideEntry[];
   eolA?: EolKind;
   eolB?: EolKind;
+  /** Строка ключа в файле-источнике (sourceA/sourceB) для blame. */
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 
@@ -202,6 +205,9 @@ export interface StandParamRow {
   param: string;
   valueA: string | null;
   valueB: string | null;
+  /** Строка параметра в groovy-файле стороны A / B (для blame). */
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 
@@ -211,6 +217,8 @@ export interface CompareStandsResult {
   stand1: string;
   branch2: string;
   stand2: string;
+  /** Путь к файлу параметров стендов в shared-репозитории (для blame). */
+  paramsPath: string;
   rows: StandParamRow[];
   stats: CompareStats;
 }
@@ -228,6 +236,9 @@ export interface RssRow {
   source: string; // сервис (папка), где параметр найден
   valueA: string | null;
   valueB: string | null;
+  /** Строка листа в values.yaml стороны A / B (для blame). */
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 

@@ -4,8 +4,12 @@ import { previewNodes } from './diffView';
 import { Combobox } from './Combobox';
 import { DiffModal, type DiffModalData } from './DiffModal';
 import { BadgeToggle, useToggleSet } from './statusFilter';
+import { useBlame, BlameTag } from './blame';
 
 const PAGE = 150;
+
+const valuesPath = (side: { env: string; stand: string }, source: string): string =>
+  `stands/${side.env}/${side.stand}/${source}/values.yaml`;
 const STATUS_LABEL: Record<RowStatus, string> = {
   equal: '=',
   different: '≠',
@@ -20,6 +24,8 @@ export function RssTable({ result }: { result: CompareRssResult }) {
   const [sourceFilter, setSourceFilter] = useState('');
   const [limit, setLimit] = useState(PAGE);
   const [modal, setModal] = useState<DiffModalData | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const blame = useBlame(result.fp);
 
   const sideA = `${result.sideA.branch} · ${result.sideA.env}/${result.sideA.stand}`;
   const sideB = `${result.sideB.branch} · ${result.sideB.env}/${result.sideB.stand}`;
@@ -38,6 +44,27 @@ export function RssTable({ result }: { result: CompareRssResult }) {
   );
 
   useEffect(() => setLimit(PAGE), [result, statuses, query, sourceFilter]);
+  useEffect(() => {
+    setExpanded(new Set());
+    blame.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+
+  // лист лежит в <сервис>/values.yaml gitops-репозитория
+  const toggleRow = (r: RssRow) => {
+    const key = `${r.source}|||${r.param}`;
+    if (expanded.has(key)) {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      return;
+    }
+    setExpanded((prev) => new Set(prev).add(key));
+    blame.ensure('gitops', result.sideA.branch, valuesPath(result.sideA, r.source));
+    blame.ensure('gitops', result.sideB.branch, valuesPath(result.sideB, r.source));
+  };
 
   const open = (r: RssRow) =>
     setModal({
@@ -95,12 +122,15 @@ export function RssTable({ result }: { result: CompareRssResult }) {
         <tbody>
           {shown.map((r) => {
             const long = isLong(r.valueA) || isLong(r.valueB);
+            const key = `${r.source}|||${r.param}`;
+            const exp = expanded.has(key);
             return (
-              <tr key={`${r.source}|||${r.param}`} className={`st-${r.status}`}>
+              <tr key={key} className={`st-${r.status}`}>
                 <td className="var">{r.param}</td>
                 <td className="file">{r.source}</td>
                 <td className="cell">
                   <div className="val">{previewNodes(r.status, 'A', r.valueA, r.valueB)}</div>
+                  {exp && <BlameTag state={blame.state('gitops', result.sideA.branch, valuesPath(result.sideA, r.source), r.lineA)} />}
                   {long && (
                     <button className="more" onClick={() => open(r)}>
                       Развернуть
@@ -109,9 +139,13 @@ export function RssTable({ result }: { result: CompareRssResult }) {
                 </td>
                 <td className="cell">
                   <div className="val">{previewNodes(r.status, 'B', r.valueA, r.valueB)}</div>
+                  {exp && <BlameTag state={blame.state('gitops', result.sideB.branch, valuesPath(result.sideB, r.source), r.lineB)} />}
                 </td>
                 <td className="status">
                   <span className={`badge st-${r.status}`}>{STATUS_LABEL[r.status]}</span>
+                  <button className="more blame-toggle" onClick={() => toggleRow(r)}>
+                    {exp ? 'скрыть blame' : 'blame'}
+                  </button>
                 </td>
               </tr>
             );

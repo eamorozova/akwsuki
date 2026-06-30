@@ -3,6 +3,7 @@ import type { CompareStandsResult, RowStatus, StandParamRow } from '../types';
 import { previewNodes } from './diffView';
 import { DiffModal, type DiffModalData } from './DiffModal';
 import { BadgeToggle, useToggleSet } from './statusFilter';
+import { useBlame, BlameTag } from './blame';
 
 const PAGE = 150;
 const STATUS_LABEL: Record<RowStatus, string> = {
@@ -18,6 +19,8 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(PAGE);
   const [modal, setModal] = useState<DiffModalData | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const blame = useBlame(result.fp);
 
   const visible = useMemo(
     () =>
@@ -30,6 +33,26 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
   );
 
   useEffect(() => setLimit(PAGE), [result, statuses, query]);
+  useEffect(() => {
+    setExpanded(new Set());
+    blame.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+
+  // параметры стендов лежат в одном groovy-файле shared-репозитория
+  const toggleRow = (r: StandParamRow) => {
+    if (expanded.has(r.param)) {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        next.delete(r.param);
+        return next;
+      });
+      return;
+    }
+    setExpanded((prev) => new Set(prev).add(r.param));
+    blame.ensure('shared', result.branch1, result.paramsPath);
+    blame.ensure('shared', result.branch2, result.paramsPath);
+  };
 
   const open = (r: StandParamRow) =>
     setModal({
@@ -86,11 +109,13 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
         <tbody>
           {shown.map((r) => {
             const long = isLong(r.valueA) || isLong(r.valueB);
+            const exp = expanded.has(r.param);
             return (
               <tr key={r.param} className={`st-${r.status}`}>
                 <td className="var">{r.param}</td>
                 <td className="cell">
                   <div className="val">{previewNodes(r.status, 'A', r.valueA, r.valueB)}</div>
+                  {exp && <BlameTag state={blame.state('shared', result.branch1, result.paramsPath, r.lineA)} />}
                   {long && (
                     <button className="more" onClick={() => open(r)}>
                       Развернуть
@@ -99,9 +124,13 @@ export function StandParamsTable({ result }: { result: CompareStandsResult }) {
                 </td>
                 <td className="cell">
                   <div className="val">{previewNodes(r.status, 'B', r.valueA, r.valueB)}</div>
+                  {exp && <BlameTag state={blame.state('shared', result.branch2, result.paramsPath, r.lineB)} />}
                 </td>
                 <td className="status">
                   <span className={`badge st-${r.status}`}>{STATUS_LABEL[r.status]}</span>
+                  <button className="more blame-toggle" onClick={() => toggleRow(r)}>
+                    {exp ? 'скрыть blame' : 'blame'}
+                  </button>
                 </td>
               </tr>
             );

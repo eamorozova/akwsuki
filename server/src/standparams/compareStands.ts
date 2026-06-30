@@ -32,15 +32,20 @@ export async function compareStands(
   const s2 = c2 ? parseStandParams(c2).find((s) => s.alias === stand2) : undefined;
   const p1 = s1?.params ?? {};
   const p2 = s2?.params ?? {};
+  const l1 = s1?.paramLines ?? {};
+  const l2 = s2?.paramLines ?? {};
 
   const keys = [...new Set([...Object.keys(p1), ...Object.keys(p2)])].sort();
   const rows: StandParamRow[] = keys.map((param) => {
     const valueA = param in p1 ? p1[param]! : null;
     const valueB = param in p2 ? p2[param]! : null;
-    return { param, valueA, valueB, status: compareValues(valueA, valueB) };
+    const row: StandParamRow = { param, valueA, valueB, status: compareValues(valueA, valueB) };
+    if (param in l1) row.lineA = l1[param];
+    if (param in l2) row.lineB = l2[param];
+    return row;
   });
 
-  return { fp, branch1, stand1, branch2, stand2, rows, stats: computeStats(rows) };
+  return { fp, branch1, stand1, branch2, stand2, paramsPath: filePath, rows, stats: computeStats(rows) };
 }
 
 function computeStats(rows: readonly StandParamRow[]): CompareStats {

@@ -41,6 +41,12 @@ describe('parseStandParams', () => {
     expect(psi.env).toBe('PSI-DE');
     expect(psi.params['ISTIO_CONTROL_PLANE']).toBe('ci0el');
     expect(psi.params['ALLOWEDUSERS']).toBeUndefined();
+
+    // строки ключей в groovy-файле (для blame)
+    expect(dev.paramLines['STAND_ALIAS']).toBe(4);
+    expect(dev.paramLines['VAULT_STORE']).toBe(9);
+    expect(dev.paramLines['VAULT_TOKEN']).toBe(10);
+    expect(psi.paramLines['ISTIO_CONTROL_PLANE']).toBe(16);
   });
 
   it('терпит комментарии, висячие запятые и пустой ввод', () => {

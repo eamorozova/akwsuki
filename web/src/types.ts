@@ -9,6 +9,8 @@ export interface RowByFile {
   valueB: string | null;
   eolA?: EolKind;
   eolB?: EolKind;
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 
@@ -28,6 +30,8 @@ export interface RowMerged {
   overridesB: OverrideEntry[];
   eolA?: EolKind;
   eolB?: EolKind;
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 
@@ -143,6 +147,8 @@ export interface StandParamRow {
   param: string;
   valueA: string | null;
   valueB: string | null;
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 
@@ -152,6 +158,7 @@ export interface CompareStandsResult {
   stand1: string;
   branch2: string;
   stand2: string;
+  paramsPath: string;
   rows: StandParamRow[];
   stats: CompareStats;
 }
@@ -167,6 +174,8 @@ export interface RssRow {
   source: string;
   valueA: string | null;
   valueB: string | null;
+  lineA?: number;
+  lineB?: number;
   status: RowStatus;
 }
 

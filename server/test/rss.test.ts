@@ -30,6 +30,12 @@ describe('flattenServiceValues', () => {
     expect(m.get('envData.SOURCES.SDSDE.HOST')).toBe('10.141.127.141');
     expect(m.get('envData.SOURCES.SDSDE.SSL_ON')).toBe('true');
     expect(m.get('resources.limits.cpu')).toBe('500m');
+
+    // строки листьев в values.yaml (для blame): base-service=стр.1, registryRepo=стр.2, …
+    const byParam = new Map(leaves.map((l) => [l.param, l.line]));
+    expect(byParam.get('registryRepo')).toBe(2);
+    expect(byParam.get('envData.TARGET_HOST')).toBe(4);
+    expect(byParam.get('envData.SOURCES.SDSDE.HOST')).toBe(8);
   });
 });
 

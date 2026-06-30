@@ -1,6 +1,7 @@
 import { parseAllDocuments, isMap, isScalar } from 'yaml';
 import type { ScannedFile, ScannedVariable } from '../domain/types';
 import { detectEol } from '../diff/textDiff';
+import { lineAt } from './lineAt';
 
 interface RangedNode {
   range?: [number, number, number] | null;
@@ -55,12 +56,4 @@ function sliceNode(src: string, node: RangedNode | null): string {
   const r = node?.range;
   if (!r) return '';
   return src.slice(r[0], r[1]);
-}
-
-/** 1-based номер строки для символьного смещения (считаем \n до offset; CRLF учитывается). */
-function lineAt(src: string, offset: number): number {
-  let line = 1;
-  const end = Math.min(offset, src.length);
-  for (let i = 0; i < end; i++) if (src.charCodeAt(i) === 10) line++;
-  return line;
 }
